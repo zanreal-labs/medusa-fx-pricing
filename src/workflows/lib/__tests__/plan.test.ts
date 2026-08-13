@@ -1,0 +1,129 @@
+import { describe, expect, it } from "vitest";
+import { planCurrencyRecompute } from "../plan";
+import type { VariantForPlanning } from "../plan";
+
+const RATE = 4; // 1 USD = 4 PLN, for round numbers
+const MARGIN = 1.1;
+
+function variant(overrides: Partial<VariantForPlanning>): VariantForPlanning {
+  return {
+    existingDefaultPrice: null,
+    managedRecord: null,
+    plnAmount: 100,
+    productId: "prod_1",
+    variantId: "variant_1",
+    ...overrides,
+  };
+}
+
+describe("planCurrencyRecompute", () => {
+  it("creates a price for a variant with a PLN price and none yet in the target currency", () => {
+    const plan = planCurrencyRecompute([variant({})], RATE, MARGIN);
+    expect(plan.created).toBe(1);
+    expect(plan.writes).toEqual([
+      { productId: "prod_1", sourcePlnAmount: 100, targetAmount: 27.5, variantId: "variant_1" },
+    ]);
+  });
+
+  it("skips a variant with no PLN price at all", () => {
+    const plan = planCurrencyRecompute([variant({ plnAmount: undefined })], RATE, MARGIN);
+    expect(plan.skippedNoPlnPrice).toBe(1);
+    expect(plan.writes).toHaveLength(0);
+  });
+
+  it("skips a variant whose PLN amount cannot produce a real price (e.g. zero)", () => {
+    const plan = planCurrencyRecompute([variant({ plnAmount: 0 })], RATE, MARGIN);
+    expect(plan.skippedNoPlnPrice).toBe(1);
+  });
+
+  it("skips a manually-overridden price and does not queue a write for it", () => {
+    const plan = planCurrencyRecompute(
+      [variant({ existingDefaultPrice: { amount: 99, id: "price_manual" }, managedRecord: null })],
+      RATE,
+      MARGIN,
+    );
+    expect(plan.skippedManualOverride).toBe(1);
+    expect(plan.writes).toHaveLength(0);
+  });
+
+  it("updates a plugin-managed price whose target has moved", () => {
+    const plan = planCurrencyRecompute(
+      [
+        variant({
+          existingDefaultPrice: { amount: 25, id: "price_managed" },
+          managedRecord: { amount: 25, priceId: "price_managed" },
+        }),
+      ],
+      RATE,
+      MARGIN,
+    );
+    expect(plan.updated).toBe(1);
+    expect(plan.writes).toEqual([
+      {
+        priceId: "price_managed",
+        productId: "prod_1",
+        sourcePlnAmount: 100,
+        targetAmount: 27.5,
+        variantId: "variant_1",
+      },
+    ]);
+  });
+
+  it("counts a plugin-managed price already at the target as unchanged, with no write", () => {
+    const plan = planCurrencyRecompute(
+      [
+        variant({
+          existingDefaultPrice: { amount: 27.5, id: "price_managed" },
+          managedRecord: { amount: 27.5, priceId: "price_managed" },
+        }),
+      ],
+      RATE,
+      MARGIN,
+    );
+    expect(plan.unchanged).toBe(1);
+    expect(plan.writes).toHaveLength(0);
+  });
+
+  it("tallies a mixed batch of variants correctly", () => {
+    const plan = planCurrencyRecompute(
+      [
+        variant({ variantId: "v-create" }),
+        variant({ plnAmount: undefined, variantId: "v-no-pln" }),
+        variant({
+          existingDefaultPrice: { amount: 99, id: "price_manual" },
+          variantId: "v-manual",
+        }),
+        variant({
+          existingDefaultPrice: { amount: 25, id: "price_managed" },
+          managedRecord: { amount: 25, priceId: "price_managed" },
+          variantId: "v-update",
+        }),
+        variant({
+          existingDefaultPrice: { amount: 27.5, id: "price_managed_2" },
+          managedRecord: { amount: 27.5, priceId: "price_managed_2" },
+          variantId: "v-unchanged",
+        }),
+      ],
+      RATE,
+      MARGIN,
+    );
+    expect(plan.created).toBe(1);
+    expect(plan.updated).toBe(1);
+    expect(plan.unchanged).toBe(1);
+    expect(plan.skippedManualOverride).toBe(1);
+    expect(plan.skippedNoPlnPrice).toBe(1);
+    expect(plan.writes.map((write) => write.variantId).sort()).toEqual(["v-create", "v-update"]);
+  });
+
+  it("returns an all-zero plan for an empty variant list", () => {
+    const plan = planCurrencyRecompute([], RATE, MARGIN);
+    expect(plan).toEqual({
+      created: 0,
+      skippedManualOverride: 0,
+      skippedNoPlnPrice: 0,
+      unchanged: 0,
+      updated: 0,
+      writes: [],
+    });
+  });
+});
