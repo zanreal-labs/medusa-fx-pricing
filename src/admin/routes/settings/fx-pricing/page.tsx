@@ -1,5 +1,5 @@
 import { defineRouteConfig } from "@medusajs/admin-sdk";
-import { Badge, Button, Container, Heading, Input, Label, Switch, Text, toast } from "@medusajs/ui";
+import { Alert, Badge, Button, Container, Heading, Input, Label, Switch, Text, toast } from "@medusajs/ui";
 import { useCallback, useEffect, useState } from "react";
 import { sdk } from "../../../lib/sdk";
 
@@ -41,7 +41,8 @@ interface ConfigResponse {
   effectiveEnabled: boolean;
   forceDisabled: boolean;
   persistedEnabled: boolean;
-  marginMultiplier: number;
+  /** `null` when no margin is configured anywhere - a run refuses until one is. */
+  marginMultiplier: number | null;
   marginMultiplierOverridden: boolean;
   stalenessToleranceHours: number;
   stalenessToleranceHoursOverridden: boolean;
@@ -125,8 +126,8 @@ const CurrencySummaryLine = ({
  *
  * Everything store-wide for this plugin lives here: the enabled toggle
  * (persisted, defaults OFF - see the module for why), the margin multiplier
- * and staleness tolerance (persisted overrides of the `medusa-config.ts`
- * defaults), the live NBP rates so an operator can sanity-check what the
+ * and staleness tolerance (persisted overrides of whatever the plugin was
+ * installed with), the live NBP rates so an operator can sanity-check what the
  * next run would compute, the last run's summary, and a manual
  * "Recompute now" action for testing a configuration change without waiting
  * for the daily schedule.
@@ -146,7 +147,9 @@ const FxPricingSettingsPage = () => {
 
   const applyConfig = useCallback((response: ConfigResponse) => {
     setConfig(response);
-    setMarginInput(String(response.marginMultiplier));
+    // A null margin is "not configured", not a value to render - leave the
+    // field genuinely empty so it reads as something still to fill in.
+    setMarginInput(response.marginMultiplier === null ? "" : String(response.marginMultiplier));
     setStalenessInput(String(response.stalenessToleranceHours));
   }, []);
 
@@ -216,7 +219,7 @@ const FxPricingSettingsPage = () => {
         method: "POST",
       });
       applyConfig(response);
-      toast.success("Reset to the medusa-config.ts defaults.");
+      toast.success("Cleared. Both settings fall back to whatever this plugin was installed with.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not reset the configuration.");
     } finally {
@@ -300,10 +303,17 @@ const FxPricingSettingsPage = () => {
               size="small"
               variant="secondary"
             >
-              Reset to plugin default
+              Clear saved values
             </Button>
           ) : null}
         </div>
+        {config && config.marginMultiplier === null ? (
+          <Alert className="mb-3" variant="warning">
+            No margin multiplier is set, so recompute runs refuse and no price is written. This
+            plugin ships without a default margin on purpose - it will not guess a markup for your
+            store. Set one below to start pricing.
+          </Alert>
+        ) : null}
         {config ? (
           <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
             <div className="flex flex-col gap-y-1">
@@ -314,12 +324,13 @@ const FxPricingSettingsPage = () => {
                 autoComplete="off"
                 id="fx-pricing-margin"
                 onChange={(event) => setMarginInput(event.target.value)}
-                placeholder="1.10"
+                placeholder="e.g. 1.25"
                 value={marginInput}
               />
               <Text className="text-ui-fg-subtle" size="xsmall">
-                foreign_amount = pln_amount / nbp_rate * margin_multiplier. 1.10 = 10% on top of
-                the raw NBP mid rate.
+                foreign_amount = pln_amount / nbp_rate * margin_multiplier. Use 1 for no markup,
+                1.25 for 25% on top of the raw NBP mid rate. Required: while this is blank, runs
+                refuse rather than guess a markup.
               </Text>
             </div>
             <div className="flex flex-col gap-y-1">

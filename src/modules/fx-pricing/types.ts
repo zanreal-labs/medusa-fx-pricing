@@ -1,13 +1,14 @@
 import type { FxSourceCurrency } from "./lib/nbp";
 
 /**
- * The `medusa-config.ts` plugin options. Every field here is a DEFAULT, not
- * the final word - `enabled` seeds the persisted settings singleton on its
- * first read (see `FxPricingSettings`/the service), and `marginMultiplier` /
+ * The plugin options. Every field here is a starting point, not the final
+ * word - `enabled` seeds the persisted settings singleton on its first read
+ * (see `FxPricingSettings`/the service), and `marginMultiplier` /
  * `stalenessToleranceHours` are what a `null` (not overridden) column on
  * that singleton falls back to. An operator can change any of the three from
- * Settings > FX pricing without touching this file or restarting the
- * backend - see the README's "Persisted settings" section.
+ * Settings > FX pricing without editing any file or restarting the backend -
+ * see the README's "Persisted settings" section. Everything here is optional;
+ * an install that sets nothing is configured entirely from the admin.
  */
 export interface FxPricingModuleOptions {
   /**
@@ -18,7 +19,17 @@ export interface FxPricingModuleOptions {
    * price on its own.
    */
   enabled?: boolean;
-  /** The margin multiplier applied on top of the raw NBP mid rate. Defaults to `1.10` (10%). */
+  /**
+   * The margin multiplier applied on top of the raw NBP mid rate, e.g. `1.25`
+   * for a 25% markup or `1` for none.
+   *
+   * THERE IS NO DEFAULT, deliberately. A margin is the one number in this
+   * plugin that decides what a customer is charged, so a shipped default
+   * would be this plugin quietly picking someone else's markup for you. Leave
+   * it unset here and set it in Settings > FX pricing instead; until it is
+   * set in one place or the other, a recompute run refuses and writes nothing
+   * rather than guessing.
+   */
   marginMultiplier?: number;
   /**
    * How many hours old the latest published NBP table A rate for a currency
@@ -34,11 +45,19 @@ export interface FxPricingModuleOptions {
 
 export interface ResolvedFxPricingModuleOptions {
   enabled: boolean;
-  marginMultiplier: number;
+  /** `null` when no margin was configured - see `FxPricingModuleOptions.marginMultiplier`. */
+  marginMultiplier: number | null;
   stalenessToleranceHours: number;
 }
 
-export const DEFAULT_MARGIN_MULTIPLIER = 1.1;
+/**
+ * How stale a published NBP rate may be before a currency is skipped.
+ *
+ * Unlike the margin, this one keeps a default: it is a tolerance for the
+ * publication schedule of a public rate table, not a commercial preference,
+ * and the safe direction is already built in - too low only skips a run, it
+ * never prices anything off a rate the operator did not intend.
+ */
 export const DEFAULT_STALENESS_TOLERANCE_HOURS = 120;
 
 export function resolveModuleOptions(
@@ -46,7 +65,7 @@ export function resolveModuleOptions(
 ): ResolvedFxPricingModuleOptions {
   return {
     enabled: options?.enabled ?? false,
-    marginMultiplier: options?.marginMultiplier ?? DEFAULT_MARGIN_MULTIPLIER,
+    marginMultiplier: options?.marginMultiplier ?? null,
     stalenessToleranceHours: options?.stalenessToleranceHours ?? DEFAULT_STALENESS_TOLERANCE_HOURS,
   };
 }
@@ -79,9 +98,24 @@ export interface ResolvedRuntimeOptions {
   effectiveEnabled: boolean;
   /** Whether `FX_PRICING_DISABLED` is set, forcing `effectiveEnabled` to `false` regardless of the persisted toggle. */
   forceDisabled: boolean;
-  marginMultiplier: number;
+  /**
+   * The margin to price with, or `null` when none is configured in either
+   * place. `null` is not a value to fall back on - it means a run must refuse
+   * (see `runFxPricingRecompute`), because there is no honest markup to guess.
+   */
+  marginMultiplier: number | null;
   stalenessToleranceHours: number;
 }
+
+/**
+ * The one message every "no margin configured" refusal uses.
+ *
+ * Shared so the job, the manual action and anything added later name the same
+ * setting and the same place to set it, rather than drifting into three
+ * differently-worded dead ends.
+ */
+export const MARGIN_NOT_CONFIGURED_MESSAGE =
+  "No margin multiplier is configured, so nothing was priced. Set one under Settings > FX pricing (for example 1.25 for a 25% markup, or 1 for no markup). This plugin ships without a default margin on purpose - it will not invent a markup and reprice your catalog behind your back.";
 
 /** Per-currency counters for one recompute run, surfaced in the admin and persisted on the settings row. */
 export interface CurrencyRunSummary {

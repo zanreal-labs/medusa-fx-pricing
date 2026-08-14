@@ -1,9 +1,10 @@
 import type { Logger, MedusaContainer } from "@medusajs/framework/types";
-import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils";
 import { createStep, createWorkflow, StepResponse, WorkflowResponse } from "@medusajs/framework/workflows-sdk";
 import { upsertVariantPricesWorkflow } from "@medusajs/medusa/core-flows";
 import {
   FX_PRICING_MODULE,
+  MARGIN_NOT_CONFIGURED_MESSAGE,
   fetchNbpRate,
   isRateStale,
 } from "../modules/fx-pricing";
@@ -70,6 +71,17 @@ export async function runFxPricingRecompute(container: MedusaContainer): Promise
   const summary: RunSummary = { currencies: {}, ran: true, ranAt: new Date().toISOString() };
 
   try {
+    // Read once, before anything is fetched or planned. `null` here means no
+    // margin is configured in either place, and this plugin ships without a
+    // default one on purpose - see `FxPricingModuleOptions.marginMultiplier`.
+    // Refusing the whole run is the only honest option: a guessed markup
+    // would be written straight onto customer-facing prices, and the operator
+    // would have no way to tell it apart from a number they chose.
+    const { marginMultiplier } = runtimeOptions;
+    if (marginMultiplier === null) {
+      throw new MedusaError(MedusaError.Types.NOT_ALLOWED, MARGIN_NOT_CONFIGURED_MESSAGE);
+    }
+
     const [supportedCurrencies, catalogVariants] = await Promise.all([
       fetchStoreSupportedCurrencyCodes(container),
       listCatalogVariants(container),
@@ -138,7 +150,7 @@ export async function runFxPricingRecompute(container: MedusaContainer): Promise
         variant.managedRecord = record ? { amount: record.amount, priceId: record.price_id } : null;
       }
 
-      const plan = planCurrencyRecompute(variantsWithPln, rate.mid, runtimeOptions.marginMultiplier);
+      const plan = planCurrencyRecompute(variantsWithPln, rate.mid, marginMultiplier);
       currencySummary.created = plan.created;
       currencySummary.updated = plan.updated;
       currencySummary.unchanged = plan.unchanged;
@@ -180,7 +192,7 @@ export async function runFxPricingRecompute(container: MedusaContainer): Promise
           await fxPricing.recordManagedPrice({
             amount: writtenPrice.amount,
             currencyCode: currency,
-            marginMultiplier: runtimeOptions.marginMultiplier,
+            marginMultiplier,
             nbpRate: rate.mid,
             priceId: writtenPrice.id,
             sourcePlnAmount: write.sourcePlnAmount,
