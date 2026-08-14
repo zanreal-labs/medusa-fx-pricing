@@ -90,7 +90,9 @@ export default defineConfig({
       resolve: "@zanreal/medusa-fx-pricing",
       options: {
         enabled: false,
-        marginMultiplier: 1.1,
+        // No margin is shipped as a default. Set yours here, or leave it out
+        // and set it in Settings > FX pricing instead. 1 means no markup.
+        marginMultiplier: 1,
         stalenessToleranceHours: 120,
       },
     },
@@ -109,12 +111,20 @@ npx medusa db:migrate
 | Option                    | Type      | Default | Description                                                                    |
 | -------------------------- | --------- | ------- | -------------------------------------------------------------------------------- |
 | `enabled`                  | `boolean` | `false` | Seeds the persisted toggle on first install. See "Persisted settings" below.     |
-| `marginMultiplier`         | `number`  | `1.10`  | Fallback margin multiplier when no override is saved. `1.10` = 10% over the raw NBP mid rate. |
+| `marginMultiplier`         | `number`  | none    | Fallback margin multiplier when no override is saved. `1` = no markup, `1.25` = 25% over the raw NBP mid rate. **No default is shipped** - see "No default margin" below. |
 | `stalenessToleranceHours`  | `number`  | `120`   | Fallback staleness tolerance (in hours) when no override is saved.               |
 
-**These are defaults, not the final word.** An operator can override any of the three from
-**Settings > FX pricing** in the admin, without touching `medusa-config.ts` or restarting the
-backend - see "Persisted settings" below. `enabled` defaults to `false` regardless of what a store
+**These are starting points, not the final word.** An operator can override any of the three from
+**Settings > FX pricing** in the admin, without editing any file or restarting the
+backend - see "Persisted settings" below.
+
+### No default margin
+
+`marginMultiplier` deliberately has no default. A margin decides what a customer is charged, so a
+shipped one would be some other store's commercial preference applied to your prices without you
+choosing it. Until a margin is set - here, or in **Settings > FX pricing** - a recompute run
+refuses and writes nothing, and the Settings page says so. Set `1` if you genuinely want the raw
+NBP mid rate with no markup; that is a choice, and it is recorded as one. `enabled` defaults to `false` regardless of what a store
 sets here at the moment of a fresh install seed - the option only changes what the very first
 persisted row starts as; after that, Settings > FX pricing is where it is changed.
 
@@ -152,7 +162,9 @@ singleton, read and written through `GET`/`POST /admin/fx-pricing/config` (see "
   every read" - an operator flips it, and that is the answer until they flip it again.
 - **`margin_multiplier`** and **`staleness_tolerance_hours`** follow the `medusa-product-costs`
   pattern instead: nullable, `null` meaning "not overridden here", resolved against
-  `moduleOptions.marginMultiplier` / `moduleOptions.stalenessToleranceHours` on every read.
+  `moduleOptions.marginMultiplier` / `moduleOptions.stalenessToleranceHours` on every read. When
+  `margin_multiplier` is null AND no `marginMultiplier` option was configured, there is no margin
+  at all: a run refuses rather than falling back to a guessed one.
 
 Every runtime path - the scheduled job, the manual "Recompute now" action, the admin config route -
 resolves all three through `FxPricingModuleService.getResolvedRuntimeOptions()`, never from a value
@@ -188,7 +200,7 @@ The resolved runtime configuration, the live NBP rates, and the last run's summa
   "effectiveEnabled": true,
   "forceDisabled": false,
   "persistedEnabled": true,
-  "marginMultiplier": 1.1,
+  "marginMultiplier": 1.25,
   "marginMultiplierOverridden": false,
   "stalenessToleranceHours": 120,
   "stalenessToleranceHoursOverridden": false,
