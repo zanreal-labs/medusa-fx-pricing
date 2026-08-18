@@ -1,0 +1,67 @@
+{
+  "fxPricing": {
+    "heading": "FX pricing",
+    "description": "Derives USD and EUR variant prices from the native PLN selling price, using the NBP (Polish central bank) table A mid rate plus a configurable margin. Runs daily; manual price edits are never overwritten - see the README for how that is guaranteed.",
+    "loading": "Loading...",
+    "dates": {
+      "never": "never"
+    },
+    "rates": {
+      "heading": "Current NBP rates",
+      "loading": "loading...",
+      "unavailable": "unavailable ({{error}})",
+      "value": "{{mid}} PLN (table {{tableNo}}, {{effectiveDate}})",
+      "usdLine": "USD: {{rate}}",
+      "eurLine": "EUR: {{rate}}"
+    },
+    "enabled": {
+      "heading": "Enabled",
+      "description": "Off by default. While off, the daily job and the manual recompute below both do nothing.",
+      "forcedOffBadge": "Forced off by FX_PRICING_DISABLED in the environment"
+    },
+    "configuration": {
+      "heading": "Configuration",
+      "clearButton": "Clear saved values",
+      "noMarginWarning": "No margin multiplier is set, so a recompute won't write any price. This plugin ships without a default margin on purpose - it will not guess a markup for your store. Set one below to start pricing.",
+      "marginLabel": "Margin multiplier",
+      "marginPlaceholder": "e.g. 1.25",
+      "marginHelp": "foreign_amount = pln_amount / nbp_rate * margin_multiplier. Use 1 for no markup, 1.25 for 25% on top of the raw NBP mid rate. Required: while this is blank, nothing runs rather than guessing a markup.",
+      "stalenessLabel": "Rate staleness tolerance (hours)",
+      "stalenessHelp": "If the latest published NBP rate is older than this, that currency is skipped for the run instead of pricing off a stale rate.",
+      "saveButton": "Save"
+    },
+    "lastRun": {
+      "heading": "Last run",
+      "recomputeButton": "Recompute now",
+      "lastFinished": "Last finished: {{date}}",
+      "none": "No run recorded yet.",
+      "justNow": "Just now:",
+      "runError": "Run error: {{error}}"
+    },
+    "summary": {
+      "notPartOfRun": "{{code}}: not included in this run",
+      "currencyDisabled": "{{code}}: skipped - not enabled in the store's supported currencies",
+      "rateUnavailable": "{{code}}: skipped - the NBP rate could not be fetched",
+      "rateStale": "{{code}}: skipped - the latest NBP rate ({{date}}) is older than the staleness tolerance",
+      "line": "{{code}}: rate {{rate}} ({{date}}) - created {{created}}, updated {{updated}}, unchanged {{unchanged}}, manual overrides skipped {{skippedManualOverride}}, no PLN price {{skippedNoPlnPrice}}"
+    },
+    "toasts": {
+      "enabled": "FX pricing enabled.",
+      "disabled": "FX pricing disabled.",
+      "saved": "Saved. The next run - scheduled or manual - uses this. No restart needed.",
+      "cleared": "Cleared. Both settings fall back to whatever this plugin was installed with.",
+      "recomputeSkipped": "Nothing ran - FX pricing is disabled.",
+      "recomputeError": "Run finished with an error: {{error}}",
+      "recomputeSuccess": "Recompute finished. See the summary below."
+    },
+    "errors": {
+      "loadFailed": "Could not load configuration.",
+      "toggleFailed": "Could not update the toggle.",
+      "marginInvalid": "Enter a margin multiplier greater than 0, e.g. 1.10 for a 10% margin.",
+      "stalenessInvalid": "Enter a staleness tolerance in whole hours, greater than 0.",
+      "saveFailed": "Could not save the configuration.",
+      "resetFailed": "Could not reset the configuration.",
+      "recomputeFailed": "Recompute failed."
+    }
+  }
+}

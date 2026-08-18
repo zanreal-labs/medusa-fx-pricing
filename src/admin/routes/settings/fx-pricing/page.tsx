@@ -1,6 +1,7 @@
 import { defineRouteConfig } from "@medusajs/admin-sdk";
 import { Alert, Badge, Button, Container, Heading, Input, Label, Switch, Text, toast } from "@medusajs/ui";
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { sdk } from "../../../lib/sdk";
 
 interface LiveRateDTO {
@@ -55,21 +56,21 @@ interface RecomputeResponse {
   summary: RunSummaryDTO;
 }
 
-const formatDateTime = (value: string | null | undefined): string => {
+const formatDateTime = (value: string | null | undefined, t: (key: string) => string): string => {
   if (!value) {
-    return "never";
+    return t("fxPricing.dates.never");
   }
   return new Date(value).toLocaleString();
 };
 
-const formatRate = (rate: LiveRateDTO | LiveRateErrorDTO | undefined): string => {
+const formatRate = (rate: LiveRateDTO | LiveRateErrorDTO | undefined, t: (key: string, options?: Record<string, unknown>) => string): string => {
   if (!rate) {
-    return "loading...";
+    return t("fxPricing.rates.loading");
   }
   if (isRateError(rate)) {
-    return `unavailable (${rate.error})`;
+    return t("fxPricing.rates.unavailable", { error: rate.error });
   }
-  return `${rate.mid.toFixed(4)} PLN (table ${rate.tableNo || "?"}, ${rate.effectiveDate})`;
+  return t("fxPricing.rates.value", { mid: rate.mid.toFixed(4), tableNo: rate.tableNo || "?", effectiveDate: rate.effectiveDate });
 };
 
 /**
@@ -83,40 +84,47 @@ const CurrencySummaryLine = ({
   code: "USD" | "EUR";
   summary: CurrencyRunSummaryDTO | undefined;
 }) => {
+  const { t } = useTranslation();
   if (!summary) {
     return (
       <Text className="text-ui-fg-subtle" size="small">
-        {code}: not part of this run
+        {t("fxPricing.summary.notPartOfRun", { code })}
       </Text>
     );
   }
   if (summary.currencyDisabled) {
     return (
       <Text className="text-ui-fg-subtle" size="small">
-        {code}: skipped - not enabled in the store's supported currencies
+        {t("fxPricing.summary.currencyDisabled", { code })}
       </Text>
     );
   }
   if (summary.rateUnavailable) {
     return (
       <Text className="text-ui-fg-error" size="small">
-        {code}: skipped - the NBP rate could not be fetched
+        {t("fxPricing.summary.rateUnavailable", { code })}
       </Text>
     );
   }
   if (summary.rateStale) {
     return (
       <Text className="text-ui-fg-error" size="small">
-        {code}: skipped - the latest NBP rate ({summary.rateEffectiveDate}) is older than the
-        staleness tolerance
+        {t("fxPricing.summary.rateStale", { code, date: summary.rateEffectiveDate })}
       </Text>
     );
   }
   return (
     <Text className="text-ui-fg-subtle" size="small">
-      {code}: rate {summary.rate} ({summary.rateEffectiveDate}) - created {summary.created},
-      updated {summary.updated}, unchanged {summary.unchanged}, manual overrides skipped{" "}
-      {summary.skippedManualOverride}, no PLN price {summary.skippedNoPlnPrice}
+      {t("fxPricing.summary.line", {
+        code,
+        rate: summary.rate,
+        date: summary.rateEffectiveDate,
+        created: summary.created,
+        updated: summary.updated,
+        unchanged: summary.unchanged,
+        skippedManualOverride: summary.skippedManualOverride,
+        skippedNoPlnPrice: summary.skippedNoPlnPrice,
+      })}
     </Text>
   );
 };
@@ -133,6 +141,7 @@ const CurrencySummaryLine = ({
  * for the daily schedule.
  */
 const FxPricingSettingsPage = () => {
+  const { t } = useTranslation();
   const [config, setConfig] = useState<ConfigResponse | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [togglingEnabled, setTogglingEnabled] = useState(false);
@@ -161,9 +170,9 @@ const FxPricingSettingsPage = () => {
         setLoadError(null);
       })
       .catch((error: unknown) => {
-        setLoadError(error instanceof Error ? error.message : "Could not load configuration.");
+        setLoadError(error instanceof Error ? error.message : t("fxPricing.errors.loadFailed"));
       });
-  }, [applyConfig]);
+  }, [applyConfig, t]);
 
   useEffect(() => {
     loadConfig();
@@ -177,9 +186,9 @@ const FxPricingSettingsPage = () => {
         method: "POST",
       });
       applyConfig(response);
-      toast.success(nextEnabled ? "FX pricing enabled." : "FX pricing disabled.");
+      toast.success(nextEnabled ? t("fxPricing.toasts.enabled") : t("fxPricing.toasts.disabled"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not update the toggle.");
+      toast.error(error instanceof Error ? error.message : t("fxPricing.errors.toggleFailed"));
     } finally {
       setTogglingEnabled(false);
     }
@@ -188,12 +197,12 @@ const FxPricingSettingsPage = () => {
   const saveConfig = async () => {
     const margin = Number.parseFloat(marginInput.replace(",", "."));
     if (!Number.isFinite(margin) || margin <= 0) {
-      toast.error("Enter a margin multiplier greater than 0, e.g. 1.10 for a 10% margin.");
+      toast.error(t("fxPricing.errors.marginInvalid"));
       return;
     }
     const staleness = Number.parseInt(stalenessInput, 10);
     if (!Number.isInteger(staleness) || staleness <= 0) {
-      toast.error("Enter a staleness tolerance in whole hours, greater than 0.");
+      toast.error(t("fxPricing.errors.stalenessInvalid"));
       return;
     }
     setSavingConfig(true);
@@ -203,9 +212,9 @@ const FxPricingSettingsPage = () => {
         method: "POST",
       });
       applyConfig(response);
-      toast.success("Saved. The next run - scheduled or manual - uses this. No restart needed.");
+      toast.success(t("fxPricing.toasts.saved"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not save the configuration.");
+      toast.error(error instanceof Error ? error.message : t("fxPricing.errors.saveFailed"));
     } finally {
       setSavingConfig(false);
     }
@@ -219,9 +228,9 @@ const FxPricingSettingsPage = () => {
         method: "POST",
       });
       applyConfig(response);
-      toast.success("Cleared. Both settings fall back to whatever this plugin was installed with.");
+      toast.success(t("fxPricing.toasts.cleared"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not reset the configuration.");
+      toast.error(error instanceof Error ? error.message : t("fxPricing.errors.resetFailed"));
     } finally {
       setResettingConfig(false);
     }
@@ -236,15 +245,15 @@ const FxPricingSettingsPage = () => {
       });
       setRecomputeResult(response.summary);
       if (!response.summary.ran) {
-        toast.warning("Nothing ran - FX pricing is disabled.");
+        toast.warning(t("fxPricing.toasts.recomputeSkipped"));
       } else if (response.summary.error) {
-        toast.error(`Run finished with an error: ${response.summary.error}`);
+        toast.error(t("fxPricing.toasts.recomputeError", { error: response.summary.error }));
       } else {
-        toast.success("Recompute finished. See the summary below.");
+        toast.success(t("fxPricing.toasts.recomputeSuccess"));
       }
       loadConfig();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Recompute failed.");
+      toast.error(error instanceof Error ? error.message : t("fxPricing.errors.recomputeFailed"));
     } finally {
       setRecomputing(false);
     }
@@ -255,11 +264,9 @@ const FxPricingSettingsPage = () => {
   return (
     <Container className="divide-y p-0">
       <div className="px-6 py-4">
-        <Heading level="h1">FX pricing</Heading>
+        <Heading level="h1">{t("fxPricing.heading")}</Heading>
         <Text className="text-ui-fg-subtle" size="small">
-          Derives USD and EUR variant prices from the native PLN selling price, using the NBP
-          (Polish central bank) table A mid rate plus a configurable margin. Runs daily; manual
-          price edits are never overwritten - see the README for how that is guaranteed.
+          {t("fxPricing.description")}
         </Text>
       </div>
 
@@ -274,13 +281,13 @@ const FxPricingSettingsPage = () => {
       <div className="px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <Heading level="h2">Enabled</Heading>
+            <Heading level="h2">{t("fxPricing.enabled.heading")}</Heading>
             <Text className="text-ui-fg-subtle" size="small">
-              Off by default. While off, the daily job and the manual recompute below both no-op.
+              {t("fxPricing.enabled.description")}
             </Text>
             {config?.forceDisabled ? (
               <Badge className="mt-2" color="orange" size="small">
-                Forced off by FX_PRICING_DISABLED in the environment
+                {t("fxPricing.enabled.forcedOffBadge")}
               </Badge>
             ) : null}
           </div>
@@ -294,7 +301,7 @@ const FxPricingSettingsPage = () => {
 
       <div className="px-6 py-4">
         <div className="mb-2 flex items-center justify-between">
-          <Heading level="h2">Configuration</Heading>
+          <Heading level="h2">{t("fxPricing.configuration.heading")}</Heading>
           {hasOverride ? (
             <Button
               disabled={!config}
@@ -303,39 +310,35 @@ const FxPricingSettingsPage = () => {
               size="small"
               variant="secondary"
             >
-              Clear saved values
+              {t("fxPricing.configuration.clearButton")}
             </Button>
           ) : null}
         </div>
         {config && config.marginMultiplier === null ? (
           <Alert className="mb-3" variant="warning">
-            No margin multiplier is set, so recompute runs refuse and no price is written. This
-            plugin ships without a default margin on purpose - it will not guess a markup for your
-            store. Set one below to start pricing.
+            {t("fxPricing.configuration.noMarginWarning")}
           </Alert>
         ) : null}
         {config ? (
           <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
             <div className="flex flex-col gap-y-1">
               <Label htmlFor="fx-pricing-margin" size="small">
-                Margin multiplier
+                {t("fxPricing.configuration.marginLabel")}
               </Label>
               <Input
                 autoComplete="off"
                 id="fx-pricing-margin"
                 onChange={(event) => setMarginInput(event.target.value)}
-                placeholder="e.g. 1.25"
+                placeholder={t("fxPricing.configuration.marginPlaceholder")}
                 value={marginInput}
               />
               <Text className="text-ui-fg-subtle" size="xsmall">
-                foreign_amount = pln_amount / nbp_rate * margin_multiplier. Use 1 for no markup,
-                1.25 for 25% on top of the raw NBP mid rate. Required: while this is blank, runs
-                refuse rather than guess a markup.
+                {t("fxPricing.configuration.marginHelp")}
               </Text>
             </div>
             <div className="flex flex-col gap-y-1">
               <Label htmlFor="fx-pricing-staleness" size="small">
-                Rate staleness tolerance (hours)
+                {t("fxPricing.configuration.stalenessLabel")}
               </Label>
               <Input
                 autoComplete="off"
@@ -345,44 +348,43 @@ const FxPricingSettingsPage = () => {
                 value={stalenessInput}
               />
               <Text className="text-ui-fg-subtle" size="xsmall">
-                If the latest published NBP rate is older than this, that currency is skipped for
-                the run instead of pricing off a stale rate.
+                {t("fxPricing.configuration.stalenessHelp")}
               </Text>
             </div>
           </div>
         ) : (
           <Text className="text-ui-fg-subtle" size="small">
-            Loading...
+            {t("fxPricing.loading")}
           </Text>
         )}
         <div className="mt-4">
           <Button disabled={!config} isLoading={savingConfig} onClick={saveConfig}>
-            Save
+            {t("fxPricing.configuration.saveButton")}
           </Button>
         </div>
       </div>
 
       <div className="px-6 py-4">
         <Heading className="mb-2" level="h2">
-          Current NBP rates
+          {t("fxPricing.rates.heading")}
         </Heading>
         <Text className="text-ui-fg-subtle" size="small">
-          USD: {formatRate(config?.liveRates.usd)}
+          {t("fxPricing.rates.usdLine", { rate: formatRate(config?.liveRates.usd, t) })}
         </Text>
         <Text className="text-ui-fg-subtle" size="small">
-          EUR: {formatRate(config?.liveRates.eur)}
+          {t("fxPricing.rates.eurLine", { rate: formatRate(config?.liveRates.eur, t) })}
         </Text>
       </div>
 
       <div className="px-6 py-4">
         <div className="mb-2 flex items-center justify-between">
-          <Heading level="h2">Last run</Heading>
+          <Heading level="h2">{t("fxPricing.lastRun.heading")}</Heading>
           <Button isLoading={recomputing} onClick={runRecompute} size="small">
-            Recompute now
+            {t("fxPricing.lastRun.recomputeButton")}
           </Button>
         </div>
         <Text className="text-ui-fg-subtle mb-2" size="small">
-          Last finished: {formatDateTime(config?.lastRunAt)}
+          {t("fxPricing.lastRun.lastFinished", { date: formatDateTime(config?.lastRunAt, t) })}
         </Text>
         {config?.lastRunSummary ? (
           <div className="flex flex-col gap-y-1">
@@ -390,20 +392,20 @@ const FxPricingSettingsPage = () => {
             <CurrencySummaryLine code="EUR" summary={config.lastRunSummary.currencies.eur} />
             {config.lastRunSummary.error ? (
               <Text className="text-ui-fg-error" size="small">
-                Run error: {config.lastRunSummary.error}
+                {t("fxPricing.lastRun.runError", { error: config.lastRunSummary.error })}
               </Text>
             ) : null}
           </div>
         ) : (
           <Text className="text-ui-fg-subtle" size="small">
-            No run recorded yet.
+            {t("fxPricing.lastRun.none")}
           </Text>
         )}
 
         {recomputeResult ? (
           <div className="mt-4 flex flex-col gap-y-1 border-t pt-4">
             <Text className="font-medium" size="small">
-              Just now:
+              {t("fxPricing.lastRun.justNow")}
             </Text>
             <CurrencySummaryLine code="USD" summary={recomputeResult.currencies.usd} />
             <CurrencySummaryLine code="EUR" summary={recomputeResult.currencies.eur} />
