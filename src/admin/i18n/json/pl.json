@@ -1,0 +1,67 @@
+{
+  "fxPricing": {
+    "heading": "Ceny walutowe",
+    "description": "Wylicza ceny wariantów w USD i EUR na podstawie ceny sprzedaży w PLN, korzystając ze średniego kursu z tabeli A NBP oraz ustawialnej marży. Działa codziennie: ręcznie wprowadzone ceny nigdy nie są nadpisywane, a sposób, w jaki jest to zagwarantowane, opisano w README.",
+    "loading": "Wczytywanie…",
+    "dates": {
+      "never": "nigdy"
+    },
+    "rates": {
+      "heading": "Aktualne kursy NBP",
+      "loading": "wczytywanie…",
+      "unavailable": "niedostępny ({{error}})",
+      "value": "{{mid}} PLN (tabela {{tableNo}}, {{effectiveDate}})",
+      "usdLine": "USD: {{rate}}",
+      "eurLine": "EUR: {{rate}}"
+    },
+    "enabled": {
+      "heading": "Włączone",
+      "description": "Domyślnie wyłączone. Gdy jest wyłączone, zarówno codzienne zadanie, jak i ręczne przeliczenie poniżej nic nie robią.",
+      "forcedOffBadge": "Wymuszone wyłączenie przez zmienną środowiskową FX_PRICING_DISABLED"
+    },
+    "configuration": {
+      "heading": "Konfiguracja",
+      "clearButton": "Wyczyść zapisane wartości",
+      "noMarginWarning": "Nie ustawiono mnożnika marży, więc przeliczenia są odrzucane i żadna cena nie zostaje zapisana. Ta wtyczka celowo nie ma domyślnej marży: nie zgadnie narzutu dla Twojego sklepu. Ustaw go poniżej, aby zacząć naliczanie cen.",
+      "marginLabel": "Mnożnik marży",
+      "marginPlaceholder": "np. 1,25",
+      "marginHelp": "foreign_amount = pln_amount / nbp_rate * margin_multiplier. Wpisz 1, aby nie stosować marży, lub 1,25 dla 25% narzutu na surowym kursie średnim NBP. Pole wymagane: dopóki jest puste, przeliczenia są odrzucane, zamiast zgadywać narzut.",
+      "stalenessLabel": "Tolerancja nieaktualności kursu (godziny)",
+      "stalenessHelp": "Jeśli najnowszy opublikowany kurs NBP jest starszy niż ta wartość, dana waluta jest pomijana w przeliczeniu zamiast liczenia ceny na podstawie nieaktualnego kursu.",
+      "saveButton": "Zapisz"
+    },
+    "lastRun": {
+      "heading": "Ostatnie uruchomienie",
+      "recomputeButton": "Przelicz teraz",
+      "lastFinished": "Ostatnio zakończone: {{date}}",
+      "none": "Nie zapisano jeszcze żadnego uruchomienia.",
+      "justNow": "Przed chwilą:",
+      "runError": "Błąd uruchomienia: {{error}}"
+    },
+    "summary": {
+      "notPartOfRun": "{{code}}: nie uwzględniono w tym przeliczeniu",
+      "currencyDisabled": "{{code}}: pominięto, waluta nie jest włączona wśród walut obsługiwanych przez sklep",
+      "rateUnavailable": "{{code}}: pominięto, nie udało się pobrać kursu NBP",
+      "rateStale": "{{code}}: pominięto, najnowszy kurs NBP ({{date}}) jest starszy niż dopuszczalna tolerancja",
+      "line": "{{code}}: kurs {{rate}} ({{date}}), utworzono {{created}}, zaktualizowano {{updated}}, bez zmian {{unchanged}}, pominięto ręcznych nadpisań {{skippedManualOverride}}, brak ceny w PLN {{skippedNoPlnPrice}}"
+    },
+    "toasts": {
+      "enabled": "Przeliczanie cen walutowych włączone.",
+      "disabled": "Przeliczanie cen walutowych wyłączone.",
+      "saved": "Zapisano. Kolejne uruchomienie, zaplanowane lub ręczne, użyje tych wartości. Restart nie jest potrzebny.",
+      "cleared": "Wyczyszczono. Oba ustawienia wracają do wartości, z jakimi zainstalowano tę wtyczkę.",
+      "recomputeSkipped": "Nic nie zostało uruchomione: przeliczanie kursów jest wyłączone.",
+      "recomputeError": "Uruchomienie zakończyło się błędem: {{error}}",
+      "recomputeSuccess": "Przeliczenie zakończone. Podsumowanie poniżej."
+    },
+    "errors": {
+      "loadFailed": "Nie udało się wczytać konfiguracji.",
+      "toggleFailed": "Nie udało się zaktualizować przełącznika.",
+      "marginInvalid": "Podaj mnożnik marży większy od 0, np. 1,10 dla marży 10%.",
+      "stalenessInvalid": "Podaj tolerancję nieaktualności w pełnych godzinach, większą od 0.",
+      "saveFailed": "Nie udało się zapisać konfiguracji.",
+      "resetFailed": "Nie udało się zresetować konfiguracji.",
+      "recomputeFailed": "Przeliczenie nie powiodło się."
+    }
+  }
+}
