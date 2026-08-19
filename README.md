@@ -70,13 +70,34 @@ this plugin has no business touching.
 
 ## Install
 
-```bash
-npm install @zanreal/medusa-fx-pricing
-# or
-pnpm add @zanreal/medusa-fx-pricing
-# or
-yarn add @zanreal/medusa-fx-pricing
+This package is not on npm yet. It installs as a git dependency, pinned to a commit:
+
+```jsonc
+// package.json
+{
+  "dependencies": {
+    "@zanreal/medusa-fx-pricing": "github:zanreal-labs/medusa-fx-pricing#5f00ff7801972c1fb757d58e3da98733f5bd3b7d"
+  }
+}
 ```
+
+Pin to the commit you tested against. There is no published tag yet, so `#main` would move under
+you on the next push to the repository; a pinned commit is the one spec that means the same thing
+tomorrow that it means today.
+
+The package compiles itself on install - `prepare` runs `medusa plugin:build`, which turns the
+checked-out source into the `.medusa/server` output its `exports` point at. pnpm 10 and newer
+refuse to run that script for a dependency they do not already trust, so a fresh install needs it
+allowed once, in your project's `pnpm-workspace.yaml`:
+
+```yaml
+# pnpm-workspace.yaml
+allowBuilds:
+  "@zanreal/medusa-fx-pricing@https://codeload.github.com/zanreal-labs/medusa-fx-pricing/tar.gz/5f00ff7801972c1fb757d58e3da98733f5bd3b7d": true
+```
+
+The key is the exact tarball URL pnpm resolves the pinned commit to, which is why it carries the
+same SHA as the dependency line above - update both together when you move the pin.
 
 Register it as a plugin in your Medusa app's `medusa-config.ts`:
 

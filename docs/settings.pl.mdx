@@ -1,0 +1,270 @@
+---
+title: Ustawienia i konfiguracja
+description: "Wszystkie opcje wtyczki i miejsca, w których da się je nadpisać, dlaczego marża nie ma wartości domyślnej, dwie zmienne środowiskowe, strona w panelu i dwie trasy API."
+---
+
+Ustawienie może pochodzić z trzech miejsc, a rozstrzygają się one w ustalonej
+kolejności. Gdy masz tę kolejność w głowie, reszta tej strony z niej wynika.
+
+```text
+  FX_PRICING_DISABLED (środowisko)     ->  potrafi tylko wymusić wyłączenie
+            |
+  Ustawienia > Ceny walutowe (baza)    ->  to, co zapisał operator
+            |
+  medusa-config.ts (opcje wtyczki)     ->  wartość zapasowa dla pustego nadpisania
+```
+
+Każda ścieżka wykonania - codzienne zadanie, przycisk **Przelicz teraz**, trasa
+konfiguracyjna panelu - rozwiązuje to wszystko jedną metodą,
+`getResolvedRuntimeOptions()`, na początku każdego przebiegu. Nic nie jest
+zapamiętywane przy starcie procesu. Zmiana zapisana w panelu działa już przy
+najbliższym przebiegu, bez restartu.
+
+## Opcje wtyczki
+
+Wszystkie trzy są nieobowiązkowe. Instalacja, która nie poda żadnej, konfiguruje
+się w całości z panelu.
+
+| Opcja | Typ | Domyślnie | Do czego służy |
+| --- | --- | --- | --- |
+| `enabled` | `boolean` | `false` | Zasiewa przełącznik w bazie, jednorazowo, przy tworzeniu wiersza ustawień |
+| `marginMultiplier` | `number` | brak | Marża zapasowa, gdy nie zapisano nadpisania |
+| `stalenessToleranceHours` | `number` | `120` | Zapasowa tolerancja nieaktualności, w godzinach |
+
+```ts title="medusa-config.ts"
+plugins: [
+  {
+    resolve: "@zanreal/medusa-fx-pricing",
+    options: {
+      enabled: false,
+      marginMultiplier: 1.25,
+      stalenessToleranceHours: 120,
+    },
+  },
+],
+```
+
+### Marża celowo nie ma wartości domyślnej
+
+`marginMultiplier` to jedyna liczba w tej wtyczce, która decyduje o tym, ile
+zapłaci klient. Wartość domyślna byłaby preferencją handlową jakiegoś innego
+sklepu, nałożoną na Twoje ceny bez Twojego wyboru.
+
+Dlatego jej nie ma. Dopóki marża nie jest ustawiona w `medusa-config.ts` albo w
+panelu, przeliczenie **odmawia w całości**, zanim pobierze choćby jeden kurs,
+zapisuje powód w podsumowaniu i nie zapisuje żadnej ceny. Strona ustawień pokazuje
+ostrzeżenie mówiące dokładnie to samo.
+
+Wpisz `1`, jeśli naprawdę chcesz goły kurs średni NBP bez narzutu. To też jest
+decyzja i o to chodzi, żeby została zapisana jako decyzja.
+
+### Tolerancja nieaktualności wartość domyślną ma
+
+`stalenessToleranceHours` zachowuje swoje `120` i ta asymetria jest zamierzona: to
+tolerancja dla harmonogramu publikacji publicznej tabeli kursów, a nie preferencja
+handlowa. Niebezpieczny kierunek jest tu zresztą z góry zamknięty, bo ustawienie
+zbyt niskiej wartości powoduje najwyżej pominięcie przebiegu, a nigdy wyceny po
+kursie, którego nie chciałeś. Zobacz [Kursy i dni bez kursu](./rates.pl.mdx).
+
+## Ustawienia w bazie
+
+`fx_pricing_settings` to jednowierszowy singleton o stałym kluczu głównym.
+Powstaje przy pierwszym odczycie, a gdy dwa równoległe pierwsze odczyty się
+wyścigną, przegrany dokłada odczyt wiersza zwycięzcy, zamiast go duplikować.
+
+Trzy ustawienia na tym wierszu nie są przechowywane tak samo i ta różnica jest
+zamierzona.
+
+**`enabled` to prawdziwa wartość logiczna, nie nadpisanie z pustką.** Zostaje
+zasiane raz, z `options.enabled`, w chwili powstania wiersza, a potem zmienia je
+wyłącznie przełącznik w panelu. Dla wyłącznika bezpieczeństwa nie ma sensownego
+„wracaj do wartości z konfiguracji przy każdym odczycie”: operator go przestawia i
+to jest odpowiedź, dopóki nie przestawi go z powrotem. Późniejsza zmiana
+`options.enabled` w `medusa-config.ts` nie zrobi nic na instalacji, która ma już
+wiersz ustawień.
+
+**`margin_multiplier` i `staleness_tolerance_hours` to nadpisania z pustką.**
+`null` znaczy „tu nie nadpisano”, a wtyczka przy każdym odczycie sięga wtedy po
+odpowiadającą opcję wtyczki. Wyczyszczenie nadpisania w panelu zapisuje `null`,
+czyli przywraca to ustawienie do tego, co mówi `medusa-config.ts`. Gdy
+`margin_multiplier` jest `null` *i* nie skonfigurowano opcji `marginMultiplier`,
+marży nie ma w ogóle i przebieg odmawia, zamiast ją wymyślać.
+
+Na tym samym wierszu siedzą jeszcze `last_run_at` i `last_run_summary`, które nie
+są konfiguracją, tylko raportem z ostatniego przebiegu. Zapisywane po każdym
+przebiegu, udanym czy nie, i odczytywane przez stronę ustawień.
+
+## Zmienne środowiskowe
+
+### `FX_PRICING_DISABLED`
+
+Wymusza wyłączenie wtyczki niezależnie od tego, co zapisano w bazie. Liczy się
+każda niepusta wartość poza `0` i `false` (porównanie bez rozróżniania wielkości
+liter, po obcięciu białych znaków).
+
+Potrafi wyłącznie wymusić **wyłączenie**, nigdy włączenie. Operator może przestawić
+przełącznik w bazie także wtedy, gdy zmienna jest ustawiona, a ten zapisany stan
+zadziała w chwili jej usunięcia. Strona w panelu pokazuje w tym czasie plakietkę,
+żeby nikt nie zachodził w głowę, czemu przełącznik w pozycji „włączone” niczego nie
+robi.
+
+Zastosowanie: środowisko, w którym zadanie i ręczna akcja nie mają prawa ruszyć
+niezależnie od zawartości bazy, na przykład staging albo wdrożenie, które właśnie
+badasz.
+
+### `FX_PRICING_CRON`
+
+Nadpisuje harmonogram zadania. Domyślnie `0 3 * * *`, czyli raz na dobę o 3:00.
+To długo po zamknięciu okna publikacji tabeli A (11:15 czasu środkowoeuropejskiego)
+za poprzedni dzień i sporo przed godzinami handlu większości sklepów, więc zmiana
+ceny nigdy nie zdarza się w trakcie czyjejś sesji zakupowej.
+
+Akurat ta rzecz jest zmienną środowiskową z powodu konstrukcyjnego, nie
+stylistycznego. Medusa oblicza `config.schedule` zadania w momencie ładowania
+wtyczki, czyli zanim powstanie kontener zależności, a więc i zanim istnieją
+rozwiązane opcje tej wtyczki. W chwili, w której harmonogram jest potrzebny, nie ma
+skąd czytać opcji.
+
+## Strona w panelu
+
+**Ustawienia > Ceny walutowe** to jedyna powierzchnia tej wtyczki w panelu.
+Widżetu przy produkcie celowo nie ma: wtyczka nie ma nic do pokazania przy
+konkretnym produkcie, czego nie pokazuje już edytor cen wariantu.
+
+- **Włączone** - przełącznik zapisywany od razu po przestawieniu. Bez osobnego
+  przycisku zapisu, bo to wyłącznik bezpieczeństwa, a nie pole formularza. Przy
+  ustawionej zmiennej środowiskowej pokazuje plakietkę o wymuszonym wyłączeniu.
+- **Konfiguracja** - mnożnik marży i tolerancja nieaktualności, z przyciskiem
+  zapisu i akcją **Wyczyść zapisane wartości**, która pojawia się po nadpisaniu
+  którejkolwiek z nich. Dopóki marży nie ma nigdzie, ostrzeżenie tłumaczy, że
+  przeliczenie nic nie zapisze, i dlaczego tak ma być.
+- **Aktualne kursy NBP** - pobierane na żywo przy każdym wejściu, żebyś mógł
+  sprawdzić, co policzyłby najbliższy przebieg, zanim go uruchomisz.
+- **Ostatnie uruchomienie** - znacznik czasu i podsumowanie ostatniego przebiegu z
+  podziałem na waluty, plus **Przelicz teraz**, które uruchamia tę samą logikę co
+  zadanie i pokazuje wynik na miejscu.
+
+## API panelu
+
+Obie trasy leżą pod `/admin/fx-pricing` i korzystają ze standardowego
+uwierzytelniania panelu Medusy.
+
+### `GET /admin/fx-pricing/config`
+
+Zwraca rozwiązaną konfigurację, kursy na żywo i podsumowanie ostatniego przebiegu.
+
+```json
+{
+  "effectiveEnabled": true,
+  "forceDisabled": false,
+  "persistedEnabled": true,
+  "marginMultiplier": 1.25,
+  "marginMultiplierOverridden": false,
+  "stalenessToleranceHours": 120,
+  "stalenessToleranceHoursOverridden": false,
+  "lastRunAt": "2026-08-13T03:00:00.000Z",
+  "lastRunSummary": {
+    "ranAt": "2026-08-13T03:00:00.000Z",
+    "ran": true,
+    "currencies": {
+      "usd": {
+        "currencyDisabled": false,
+        "rateUnavailable": false,
+        "rateStale": false,
+        "created": 3,
+        "updated": 12,
+        "unchanged": 140,
+        "skippedManualOverride": 5,
+        "skippedNoPlnPrice": 0,
+        "rate": 3.9123,
+        "rateEffectiveDate": "2026-08-12"
+      }
+    }
+  },
+  "liveRates": {
+    "usd": { "mid": 3.9123, "effectiveDate": "2026-08-13", "tableNo": "154/A/NBP/2026" },
+    "eur": { "error": "NBP request for eur failed with status 503" }
+  }
+}
+```
+
+Trzy pola warto wskazać palcem.
+
+`persistedEnabled` różni się od `effectiveEnabled` dokładnie wtedy, gdy
+`forceDisabled` jest prawdą. To właśnie pozwala stronie pokazać przełącznik w
+pozycji „włączone” razem z plakietką tłumaczącą, że środowisko go przykrywa.
+
+Wpis w `liveRates` jest albo kursem, albo obiektem `{ "error": ... }`, osobno i
+niezależnie dla każdej waluty. Błąd jednej nigdy nie wywraca całego żądania.
+
+`lastRunSummary` jest `null` do zakończenia pierwszego przebiegu. W jego wnętrzu
+waluta, której w przebiegu nie było, jest po prostu nieobecna w `currencies`,
+zamiast być obecna z samymi zerami.
+
+### `POST /admin/fx-pricing/config`
+
+Zapisuje nadpisanie. Treść: `{ enabled?, margin_multiplier?, staleness_tolerance_hours? }`.
+Zapisywane są wyłącznie klucze obecne w żądaniu. Odpowiedź ma ten sam kształt co
+`GET` i pokazuje stan tuż po zapisie.
+
+- `enabled` musi być wartością logiczną. Nie przyjmuje `null`, bo to prawdziwy
+  przełącznik, a nie nadpisanie wartości zapasowej.
+- `margin_multiplier` musi być liczbą skończoną większą od `0` i nie większą niż
+  `10`, albo `null` w celu wyczyszczenia nadpisania. Sufit chroni przed pomyłką
+  przy wpisywaniu, nie jest limitem biznesowym.
+- `staleness_tolerance_hours` musi być liczbą całkowitą większą od `0` i nie
+  większą niż `720`, czyli 30 dni, albo `null` w celu wyczyszczenia nadpisania.
+
+Nieznany klucz, wartość złego typu albo treść bez ani jednego zapisywalnego klucza
+kończą się kodem `400` z opisem problemu.
+
+### `POST /admin/fx-pricing/recompute`
+
+Uruchamia natychmiast to samo przeliczenie co zadanie i zwraca
+`{ "summary": { ... } }` w kształcie `RunSummary` pokazanym wyżej.
+
+Sama trasa nie sprawdza przełącznika. Sprawdzenie należy do wspólnej funkcji
+przeliczającej, dzięki czemu trasa i zadanie nie mogą się rozjechać w ocenie, czy
+wolno im działać: przy wyłączonej wtyczce obie dostają `{ "ran": false }` i nic nie
+zostaje zapisane.
+
+## Jak czytać podsumowanie przebiegu
+
+| Pole | Znaczenie |
+| --- | --- |
+| `ranAt` | Znacznik czasu przebiegu w formacie ISO |
+| `ran` | `false`, gdy przebieg nic nie zrobił, bo przełącznik był wyłączony |
+| `error` | Obecne, gdy przebieg się nie powiódł, na przykład przy braku marży |
+| `currencies[kod].currencyDisabled` | Waluty nie ma wśród obsługiwanych przez sklep |
+| `currencies[kod].rateUnavailable` | Kursu NBP nie udało się pobrać ani sparsować |
+| `currencies[kod].rateStale` | Najnowszy opublikowany kurs jest starszy niż tolerancja |
+| `currencies[kod].created` / `updated` / `unchanged` | Ceny utworzone, przesunięte i już poprawne |
+| `currencies[kod].skippedManualOverride` | Zostawione w spokoju, zobacz [Ręczne nadpisania](./overrides.pl.mdx) |
+| `currencies[kod].skippedNoPlnPrice` | Zobacz uwagę niżej |
+| `currencies[kod].rate` / `rateEffectiveDate` | Kurs użyty w przebiegu, obecny zawsze, gdy udało się go pobrać |
+
+Jedno zastrzeżenie do `skippedNoPlnPrice`. Warianty, które w ogóle nie mają
+domyślnej ceny w PLN, są odfiltrowywane przed planowaniem, więc nigdy nie trafiają
+do tego licznika. W praktyce rośnie on tylko dla wariantu, który cenę w PLN *ma*,
+ale nie da się z niej policzyć sensownej kwoty docelowej, na przykład jest
+niedodatnia. Czytaj to jako „ceny PLN nie do użycia”, a nie „warianty bez ceny w
+PLN”.
+
+## Uruchamianie workflow bezpośrednio
+
+Wtyczka eksportuje swoje workflow, żeby projekt gospodarza mógł wywołać
+przeliczenie z własnego skryptu, akcji w panelu albo harmonogramu:
+
+```ts
+import { recomputeFxPricesWorkflow, runFxPricingRecompute } from "@zanreal/medusa-fx-pricing/workflows";
+```
+
+`runFxPricingRecompute(container)` to zwykła funkcja asynchroniczna, którą wywołuje
+i zadanie, i trasa panelu. `recomputeFxPricesWorkflow` opakowuje ją jako workflow do
+złożenia w większą całość.
+
+Kompensacji celowo nie ma. Każdy zapis to uzgodnienie cen wyprowadzonych z PLN w
+stronę celu policzonego na świeżo z bieżącej ceny w PLN i bieżącego kursu, więc
+naprawą po przerwanym przebiegu jest po prostu kolejny przebieg. Kompensacja
+cofająca połowiczne przeliczenie zostawiłaby ceny dalej od celu niż przed startem,
+a nie bliżej.

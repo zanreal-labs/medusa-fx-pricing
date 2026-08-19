@@ -1,0 +1,159 @@
+---
+title: Manual overrides
+description: Why the ownership marker cannot live on the price row, what the FxManagedPrice stamp records, the four branches the decision takes, and the one way to hand a price back to the plugin.
+---
+
+A plugin that rewrites prices every night has to answer one question before it is
+safe to install: how does it know which prices are its own?
+
+Get that wrong in the permissive direction and it silently overwrites the price
+somebody set by hand for a good reason. Get it wrong in the restrictive direction
+and it stops managing prices it should be managing, quietly, with no error
+anywhere. This page is the answer, and it is the part of the plugin worth reading
+even if you read nothing else.
+
+## Why the marker cannot live on the price
+
+The obvious design is to mark the prices you wrote, and skip the ones you did not.
+Medusa v2 gives you nowhere to put that mark.
+
+**`Price` has no `metadata` column.** Unlike `PriceList`, the money-amount row
+itself carries no free-form JSON. There is simply no field to stamp.
+
+**`price_rules` are not a place to hide a flag.** They exist to scope a price to a
+pricing *context*: a region, a customer group, a quantity break. Attaching
+something like `{ fx_pricing_managed: "true" }` would not mark the price, it would
+change what the price *is*: a price that only matches a checkout context which
+happens to supply that same attribute. Since no real checkout supplies it, the
+price would become invisible at checkout. That is not a marker with a side effect,
+that is a broken price.
+
+So the ownership record has to live somewhere else, and it does.
+
+## The stamp
+
+`FxManagedPrice` is this plugin's own table. One row per `(variant, currency)` the
+plugin has ever priced, recording, among audit fields, the two that decide
+everything:
+
+| Column | What it means |
+| --- | --- |
+| `price_id` | The exact `Price` row this plugin last wrote |
+| `amount` | The exact amount it wrote into that row |
+| `source_pln_amount`, `nbp_rate`, `margin_multiplier` | The inputs that produced it, kept for audit and debugging |
+| `computed_at` | When it was last written |
+
+Read that as an **optimistic-concurrency stamp**, not a flag. The plugin is not
+recording "I own this". It is recording "when I last looked, this price was row
+`X` holding amount `Y`". On the next run it checks whether that is still true, and
+a price is only still the plugin's to touch if it is *still exactly what the
+plugin left it as*.
+
+That framing is what makes the rule robust. It does not depend on catching an edit
+as it happens, on a hook firing, or on anyone remembering to tell the plugin
+anything. It only asks a question the database can always answer.
+
+## The four branches
+
+`decidePriceAction` is a pure function, and it takes exactly four paths. In order:
+
+### 1. No price exists in that currency yet
+
+```text
+existingDefaultPrice === null  ->  { action: "create" }
+```
+
+Nothing to protect, so create one and record the stamp.
+
+### 2. A price exists, and the plugin has never recorded writing one
+
+```text
+managedRecord === null  ->  { action: "skip", reason: "manual-override" }
+```
+
+Somebody else put it there. An initial catalogue import, a manual edit, an edit
+made before this plugin was ever installed - it does not matter which. Left alone,
+permanently.
+
+### 3. A price exists, the plugin has a stamp, but the ids differ
+
+```text
+managedRecord.priceId !== existingDefaultPrice.id
+  ->  { action: "skip", reason: "manual-override" }
+```
+
+The row the plugin wrote is gone and a different row is now the default price in
+that currency. Something deleted and replaced it. Whatever is there now is not
+what the plugin wrote, so it is hands off.
+
+### 4. Same id, but the amount no longer matches
+
+```text
+managedRecord.amount !== existingDefaultPrice.amount
+  ->  { action: "skip", reason: "manual-override" }
+```
+
+This is the important one, and the reason the stamp records the amount and not
+just the id. An in-place price edit in the admin changes the amount and keeps the
+row id. If the stamp only tracked ids, that edit would be invisible and the next
+run would silently overwrite it.
+
+### Otherwise: the price is still exactly what the plugin left
+
+```text
+existingDefaultPrice.amount === targetAmount  ->  { action: "noop", priceId }
+otherwise                                     ->  { action: "update", priceId }
+```
+
+Safe to manage. It is only actually written if the target has moved; if the rate
+and margin still produce the amount already there, the run counts it as
+`unchanged` and writes nothing.
+
+## Skipping is permanent, and that is the point
+
+Branches 2, 3 and 4 are not "skip this run". The condition that triggers them does
+not heal on its own: an amount that no longer matches the stamp will still not
+match tomorrow, and the run after that, forever.
+
+A stale stamp is deliberately *not* deleted when this happens. It no longer
+matches the live price either way, so it decides nothing, and removing it would
+only turn a clear "somebody else owns this" into branch 2's "nobody ever stamped
+this" - the same answer, reached less informatively.
+
+## Handing a price back
+
+There is exactly one way to make the plugin manage a variant and currency again:
+**delete the price**.
+
+Deleting it puts the next run back at branch 1, which creates a fresh price and
+stamps it. That is the reclaim path, and it works whether the price was set by
+hand or was a plugin price the plugin later lost track of.
+
+The service also exposes `clearManagedPrice(variantId, currencyCode)`, which
+removes the stamp without touching the price. It is not called from the recompute
+path at all - it exists for a maintenance script that wants to explicitly un-adopt
+a variant and currency. On its own it does not hand the price back: with the stamp
+gone and the price still present, the next run lands on branch 2 and still skips.
+
+## Reading the result
+
+The run summary counts every branch, per currency, and **Settings > FX pricing**
+renders it:
+
+- `created` - branch 1
+- `updated` - a live price moved to a new target
+- `unchanged` - already at the target and still plugin-managed
+- `skippedManualOverride` - branches 2, 3 and 4 combined
+
+A healthy steady state is a large `unchanged`, a small `updated` as the rate
+drifts, and a `skippedManualOverride` that matches the number of prices your team
+knows it set by hand. If that last number grows when nobody edited anything, that
+is worth investigating: something else in your stack is writing default prices.
+
+## What it never touches at all
+
+Only the **default** price in a currency - no price list, no price rules - is ever
+read or written, in either direction. The check is `!rules_count` on the price row.
+A region override, a customer-group price, a quantity break or anything inside a
+price list is invisible to this plugin: not skipped as an override, simply never
+looked at.

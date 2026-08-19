@@ -1,0 +1,183 @@
+---
+title: Wprowadzenie
+description: "Wtyczka do Medusy v2, która co dobę przelicza ceny wariantów na USD i EUR z ceny w PLN po średnim kursie z tabeli A NBP i nigdy nie nadpisuje ceny wpisanej ręcznie."
+---
+
+Sprzedajesz w złotówkach, a na wystawie mają stać jeszcze dolary i euro.
+`@zanreal/medusa-fx-pricing` bierze na siebie dokładnie tę jedną rzecz: raz na
+dobę czyta cenę PLN każdego wariantu, przelicza ją po średnim kursie z tabeli A
+NBP, dokłada marżę, którą wybrałeś, i zapisuje wynik jako cenę tego wariantu w
+walucie docelowej.
+
+## Obietnica, od której wszystko się zaczyna
+
+Jeśli cenę w USD albo EUR ustawił człowiek, wtyczka jej nie ruszy. Nigdy, ani
+tego dnia, ani za pół roku. Nie „raczej nie ruszy” i nie „nie ruszy, dopóki
+różnica jest mała”: kod sprawdza to przed każdym zapisem i przy najmniejszej
+wątpliwości wycofuje się z decyzją „to nie moje”.
+
+To nie jest dodatek do funkcjonalności, tylko warunek, żeby taka wtyczka w ogóle
+nadawała się do włączenia na żywym sklepie. Mechanizm jest na tyle nieoczywisty,
+że ma własną stronę: [Ręczne nadpisania](./overrides.pl.mdx).
+
+## Czego brakuje w samej Medusie
+
+Moduł Pricing bez problemu przechowa cenę w USD obok ceny w PLN. Nie ma natomiast
+żadnego zdania na temat tego, skąd ta cena w USD się wzięła, ani niczego, co by
+ją utrzymywało w zgodzie z kursem.
+
+W praktyce zostają dwa wyjścia. Można wpisywać ceny ręcznie, co jest w porządku
+w dniu wpisania i coraz mniej w porządku każdego kolejnego dnia, w miarę jak kurs
+odjeżdża, a nikt tego nie zauważa. Albo można napisać skrypt, który potem każdy
+taki sklep pisze jeszcze raz, trochę inaczej, i utrzymuje sam.
+
+Ta wtyczka jest tym skryptem, z rozwiązanymi dwoma trudnymi miejscami: co zrobić
+w dniu, w którym NBP nie opublikowało tabeli, i skąd wiedzieć, których cen nie
+wolno dotykać.
+
+## Wzór
+
+```text
+foreign_amount = pln_amount / nbp_rate * margin_multiplier
+```
+
+`nbp_rate` to liczba złotych za jedną jednostkę waluty obcej, bo tak zapisuje to
+NBP - dlatego dzielenie przeprowadza kwotę na walutę obcą po surowym kursie
+średnim. `margin_multiplier` dokłada do tego narzut: `1,25` to 25% na wierzchu,
+`1` oznacza „chcę goły kurs średni i nic więcej”.
+
+Wynik jest zaokrąglany w górę przy połówce, do dwóch miejsc po przecinku. Jeżeli
+którykolwiek składnik nie pozwala policzyć sensownej ceny (kwota PLN równa zeru,
+kurs niedodatni, marża niedodatnia), funkcja nie zwraca nic, a wariant zostaje
+pominięty w tym przebiegu. Ta sama zasada wraca w całej wtyczce w najostrzejszej
+postaci przy marży: domyślnej marży nie ma i nie będzie. Szczegóły w
+[Ustawieniach](./settings.pl.mdx).
+
+## Przebieg krok po kroku
+
+```text
+  przełącznik włączony?  ->  nie  ->  wpis w logu „skipped (disabled)”, zero zapisów
+       |
+      tak
+       v
+  marża ustawiona?  ->  nie  ->  odmowa całego przebiegu, powód zapisany
+       |
+      tak
+       v
+  odczyt walut obsługiwanych przez sklep + wszystkich wariantów z cenami
+       |
+       v
+  dla usd, potem eur:
+       waluta włączona w sklepie?          ->  nie  ->  pomiń tę walutę
+       pobranie kursu z tabeli A NBP       ->  błąd  ->  pomiń tę walutę
+       kurs starszy niż tolerancja?        ->  tak   ->  pomiń tę walutę
+       |
+       v
+       dla każdego wariantu z domyślną ceną w PLN:
+           policz kwotę docelową
+           zdecyduj: utwórz / zaktualizuj / zostaw  ->  patrz Ręczne nadpisania
+       |
+       v
+       zapis, ponowny odczyt, ostemplowanie tego, co zapisano
+       |
+       v
+  zapis podsumowania  ->  widoczne w Ustawienia > Ceny walutowe
+```
+
+Dwie rzeczy w tym schemacie warto powiedzieć wprost.
+
+**Walutę pomija się w całości, nigdy wariant po wariancie.** Jeśli EUR nie jest
+włączone w sklepie, kurs EUR nie daje się pobrać albo najnowszy opublikowany kurs
+jest starszy niż Twoja tolerancja, wtyczka nie podejmuje ani jednej próby zapisu
+w EUR. Zapisuje powód i przechodzi do następnej waluty. Katalog wyceniony w
+połowie jest gorszy niż niewyceniony wcale.
+
+**Czytana i zapisywana jest wyłącznie cena domyślna.** Cena zawężona regułą, czyli
+nadpisanie dla regionu, cena dla grupy klientów, próg ilościowy albo cokolwiek z
+cennika, to czyjaś świadoma decyzja i wtyczka trzyma się od niej z daleka. Rusza
+dokładnie tę cenę, którą widzisz w podstawowej siatce cen na stronie produktu.
+
+## Instalacja
+
+Tego pakietu nie ma jeszcze na npmie. Instaluje się go jako zależność gitową,
+przypiętą do konkretnego commitu:
+
+```jsonc title="package.json"
+{
+  "dependencies": {
+    "@zanreal/medusa-fx-pricing": "github:zanreal-labs/medusa-fx-pricing#5f00ff7801972c1fb757d58e3da98733f5bd3b7d"
+  }
+}
+```
+
+Przypnij commit, na którym testowałeś. Opublikowanego tagu jeszcze nie ma, więc
+`#main` przesunąłby Ci się pod ręką przy najbliższym pushu; przypięty commit jutro
+znaczy to samo co dziś.
+
+Pakiet buduje się sam przy instalacji: `prepare` uruchamia `medusa plugin:build`,
+co zamienia pobrane źródła w katalog `.medusa/server`, na który wskazuje pole
+`exports`. pnpm w wersji 10 i nowszej domyślnie nie uruchamia takiego skryptu dla
+zależności, której jeszcze nie ufa, więc świeża instalacja wymaga jednorazowej
+zgody:
+
+```yaml title="pnpm-workspace.yaml"
+allowBuilds:
+  "@zanreal/medusa-fx-pricing@https://codeload.github.com/zanreal-labs/medusa-fx-pricing/tar.gz/5f00ff7801972c1fb757d58e3da98733f5bd3b7d": true
+```
+
+Kluczem jest dokładny adres archiwum, na który pnpm rozwiązuje przypięty commit,
+dlatego niesie ten sam SHA co linia zależności. Przesuwając pin, zmień oba miejsca
+naraz. Następnie zarejestruj wtyczkę:
+
+```ts title="medusa-config.ts"
+module.exports = defineConfig({
+  plugins: [
+    {
+      resolve: "@zanreal/medusa-fx-pricing",
+      options: {
+        marginMultiplier: 1.25,
+      },
+    },
+  ],
+});
+```
+
+Każda opcja jest nieobowiązkowa, łącznie z tą - instalacja, która nie ustawia
+niczego, konfiguruje się w całości z panelu. Na koniec uruchom migracje:
+
+```bash
+npx medusa db:migrate
+```
+
+## Zaraz po instalacji nic się nie dzieje
+
+I bardzo dobrze. Świeża instalacja jest bezczynna: `enabled` startuje jako
+`false`, a dopóki przełącznik jest wyłączony, i codzienne zadanie, i przycisk
+ręcznego przeliczenia nie robią nic i mówią o tym wprost. Wtyczka, która
+przecenia żywy katalog w chwili instalacji, to wtyczka, której nikt nie odważy się
+wypróbować.
+
+Wejdź w **Ustawienia > Ceny walutowe**, ustaw marżę, przestaw przełącznik i
+naciśnij **Przelicz teraz**, żeby zobaczyć cały przebieg na własne oczy.
+Podsumowanie pokaże dla każdej waluty, ile cen utworzono, ile zaktualizowano, ile
+było już poprawnych i ile zostawiono w spokoju, bo należą do człowieka.
+
+## Wymagania
+
+Node.js 22.13 lub nowszy oraz Medusa 2.18.0. Pakiety `@medusajs/admin-sdk`,
+`@medusajs/framework`, `@medusajs/icons`, `@medusajs/js-sdk`, `@medusajs/medusa`,
+`@medusajs/ui` i `react-i18next` są zależnościami równorzędnymi, a projekt na
+Medusie ma je już u siebie. Panel jest przetłumaczony na angielski i polski, pod
+przestrzenią kluczy `fxPricing.*`.
+
+## Co dalej
+
+- **[Kursy i dni bez kursu](./rates.pl.mdx)** - który endpoint NBP jest odpytywany
+  i dlaczego weekend nie wymaga żadnego wyjątku w kodzie, co naprawdę mierzy
+  tolerancja nieaktualności i co się dzieje z walutą niewłączoną w sklepie.
+- **[Ręczne nadpisania](./overrides.pl.mdx)** - serce wtyczki. Dlaczego znacznika
+  własności nie da się trzymać przy samej cenie, co zapisuje stempel i jakie cztery
+  rozstrzygnięcia są możliwe.
+- **[Ustawienia i konfiguracja](./settings.pl.mdx)** - każda opcja, miejsca, w
+  których można ją nadpisać, dwie zmienne środowiskowe, strona w panelu i dwie
+  trasy API.

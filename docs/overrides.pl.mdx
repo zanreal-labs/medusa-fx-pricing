@@ -1,0 +1,157 @@
+---
+title: Ręczne nadpisania
+description: "Dlaczego znacznika własności nie da się zapisać przy cenie, co zapamiętuje stempel FxManagedPrice, cztery możliwe rozstrzygnięcia i jedyny sposób oddania ceny wtyczce."
+---
+
+Wtyczka, która co noc przepisuje ceny, musi odpowiedzieć na jedno pytanie, zanim
+da się ją bezpiecznie zainstalować: skąd wie, które ceny są jej własne?
+
+Pomyłka w stronę pobłażliwą oznacza po cichu nadpisaną cenę, którą ktoś wpisał
+ręcznie i miał ku temu powód. Pomyłka w stronę zachowawczą oznacza ceny, które
+wtyczka powinna prowadzić, a przestała, też po cichu i bez żadnego błędu. Ta
+strona jest odpowiedzią i jest tą częścią dokumentacji, którą warto przeczytać,
+nawet jeśli nie przeczytasz żadnej innej.
+
+## Dlaczego znacznika nie da się trzymać przy cenie
+
+Narzucające się rozwiązanie to oznaczyć ceny, które się zapisało, i omijać
+pozostałe. Medusa v2 nie ma miejsca, w którym można by taki znacznik postawić.
+
+**`Price` nie ma kolumny `metadata`.** W odróżnieniu od `PriceList` sam wiersz z
+kwotą nie niesie żadnego dowolnego JSON-a. Nie ma po prostu pola do ostemplowania.
+
+**`price_rules` to nie schowek na flagę.** Istnieją po to, żeby zawęzić cenę do
+*kontekstu* cenowego: regionu, grupy klientów, progu ilościowego. Doczepienie
+czegoś w rodzaju `{ fx_pricing_managed: "true" }` nie oznaczyłoby ceny, tylko
+zmieniłoby to, *czym ona jest*: w cenę pasującą wyłącznie do koszyka, który akurat
+poda ten sam atrybut. Ponieważ żaden prawdziwy koszyk go nie podaje, cena stałaby
+się niewidoczna przy zakupie. To nie jest znacznik z efektem ubocznym, to jest
+zepsuta cena.
+
+Zapis o własności musi więc mieszkać gdzie indziej i tam właśnie mieszka.
+
+## Stempel
+
+`FxManagedPrice` to własna tabela tej wtyczki. Jeden wiersz na parę
+`(wariant, waluta)`, którą wtyczka kiedykolwiek wyceniła, a wśród pól audytowych
+dwa rozstrzygające o wszystkim:
+
+| Kolumna | Znaczenie |
+| --- | --- |
+| `price_id` | Dokładnie ten wiersz `Price`, który wtyczka ostatnio zapisała |
+| `amount` | Dokładnie ta kwota, którą tam wpisała |
+| `source_pln_amount`, `nbp_rate`, `margin_multiplier` | Składniki, z których to wyszło, trzymane do audytu i diagnostyki |
+| `computed_at` | Kiedy zapis nastąpił |
+
+Czytaj to jako **stempel optymistycznej współbieżności**, a nie flagę. Wtyczka nie
+zapisuje „to jest moje”. Zapisuje „gdy patrzyłam ostatnio, ta cena była wierszem
+`X` z kwotą `Y`”. Przy kolejnym przebiegu sprawdza, czy to nadal prawda, a cena
+pozostaje jej do ruszania tylko wtedy, gdy jest *wciąż dokładnie tym, co
+zostawiła*.
+
+Takie ujęcie czyni regułę odporną. Nie zależy od złapania edycji w locie, od
+zadziałania hooka ani od tego, czy ktoś pamiętał, żeby cokolwiek wtyczce zgłosić.
+Zadaje wyłącznie pytanie, na które baza zawsze potrafi odpowiedzieć.
+
+## Cztery rozstrzygnięcia
+
+`decidePriceAction` jest funkcją czystą i ma dokładnie cztery ścieżki. Po kolei:
+
+### 1. Ceny w tej walucie jeszcze nie ma
+
+```text
+existingDefaultPrice === null  ->  { action: "create" }
+```
+
+Nie ma czego chronić, więc cena powstaje, a stempel zostaje odciśnięty.
+
+### 2. Cena jest, a wtyczka nigdy nie zapisała, że ją tworzyła
+
+```text
+managedRecord === null  ->  { action: "skip", reason: "manual-override" }
+```
+
+Wstawił ją ktoś inny. Import katalogu, ręczna edycja, edycja sprzed instalacji tej
+wtyczki - to nie ma znaczenia. Zostaje nietknięta, na stałe.
+
+### 3. Cena jest, stempel jest, ale identyfikatory się różnią
+
+```text
+managedRecord.priceId !== existingDefaultPrice.id
+  ->  { action: "skip", reason: "manual-override" }
+```
+
+Wiersz zapisany przez wtyczkę zniknął, a domyślną ceną w tej walucie jest teraz
+inny. Coś go skasowało i podmieniło. To, co stoi tam dziś, nie jest tym, co
+wtyczka zapisała, więc ręce precz.
+
+### 4. Ten sam identyfikator, ale kwota się nie zgadza
+
+```text
+managedRecord.amount !== existingDefaultPrice.amount
+  ->  { action: "skip", reason: "manual-override" }
+```
+
+To najważniejszy przypadek i powód, dla którego stempel pamięta kwotę, a nie sam
+identyfikator. Edycja ceny w panelu zmienia kwotę i zostawia ten sam wiersz. Gdyby
+stempel śledził wyłącznie identyfikatory, taka edycja byłaby niewidoczna, a kolejny
+przebieg po cichu by ją nadpisał.
+
+### W przeciwnym razie: cena jest wciąż tym, co wtyczka zostawiła
+
+```text
+existingDefaultPrice.amount === targetAmount  ->  { action: "noop", priceId }
+w przeciwnym razie                            ->  { action: "update", priceId }
+```
+
+Można ją prowadzić. Zapis następuje tylko wtedy, gdy cel się przesunął; jeśli kurs
+i marża dają nadal tę samą kwotę, przebieg liczy to jako `unchanged` i nie zapisuje
+nic.
+
+## Pominięcie jest trwałe i o to właśnie chodzi
+
+Ścieżki 2, 3 i 4 nie znaczą „pomiń w tym przebiegu”. Warunek, który je wyzwala, nie
+zagoi się sam: kwota niepasująca do stempla nie zacznie pasować jutro ani
+pojutrze, nigdy.
+
+Nieaktualny stempel celowo *nie* jest wtedy kasowany. I tak nie pasuje już do
+żywej ceny, więc niczego nie rozstrzyga, a jego usunięcie zamieniłoby czytelne
+„właścicielem jest ktoś inny” na „nikt tego nigdy nie stemplował” ze ścieżki 2.
+Ta sama odpowiedź, tylko mniej mówiąca.
+
+## Jak oddać cenę wtyczce
+
+Sposób jest dokładnie jeden: **skasuj cenę**.
+
+Skasowanie ustawia kolejny przebieg na ścieżkę 1, która tworzy nową cenę i odciska
+świeży stempel. To jest droga odzyskiwania i działa niezależnie od tego, czy cena
+była wpisana ręcznie, czy była ceną wtyczki, nad którą wtyczka straciła kontrolę.
+
+Serwis wystawia też `clearManagedPrice(variantId, currencyCode)`, które usuwa
+stempel bez dotykania ceny. Ścieżka przeliczania nie wywołuje go w ogóle - jest dla
+skryptu utrzymaniowego, który chce świadomie „odadoptować” parę wariant-waluta.
+Samo w sobie nie oddaje ceny wtyczce: bez stempla i z ceną nadal na miejscu kolejny
+przebieg trafia na ścieżkę 2 i dalej pomija.
+
+## Jak to czytać w podsumowaniu
+
+Podsumowanie przebiegu liczy każdą ścieżkę osobno dla każdej waluty, a
+**Ustawienia > Ceny walutowe** to renderują:
+
+- `created` - ścieżka 1
+- `updated` - żywa cena przesunęła się na nowy cel
+- `unchanged` - już równa celowi i wciąż prowadzona przez wtyczkę
+- `skippedManualOverride` - ścieżki 2, 3 i 4 razem
+
+Zdrowy stan ustalony to duże `unchanged`, niewielkie `updated` w miarę dryfowania
+kursu i `skippedManualOverride` na poziomie liczby cen, o których Twój zespół wie,
+że ustawił je ręcznie. Jeśli ta ostatnia liczba rośnie, choć nikt niczego nie
+edytował, warto to sprawdzić: coś innego w Twoim wdrożeniu zapisuje ceny domyślne.
+
+## Czego nie dotyka w ogóle
+
+Czytana i zapisywana jest wyłącznie cena **domyślna** w danej walucie, czyli bez
+cennika i bez reguł. Sprawdzeniem jest `!rules_count` na wierszu ceny. Nadpisanie
+regionalne, cena dla grupy klientów, próg ilościowy czy cokolwiek wewnątrz cennika
+są dla tej wtyczki niewidoczne: nie są pomijane jako nadpisania, po prostu nigdy nie
+trafiają jej przed oczy.

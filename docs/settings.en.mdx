@@ -1,0 +1,264 @@
+---
+title: Settings and configuration
+description: Every plugin option and where it can be overridden, why the margin ships without a default, the two environment variables, the admin page, and the two admin API routes.
+---
+
+There are three places a setting can come from, and they resolve in a fixed order.
+Once you have that order, everything else on this page follows from it.
+
+```text
+  FX_PRICING_DISABLED (environment)   ->  can only force `enabled` off
+            |
+  Settings > FX pricing (persisted)   ->  what an operator saved
+            |
+  medusa-config.ts (plugin options)   ->  the fallback for an unset override
+```
+
+Every runtime path - the daily job, the **Recompute now** button, the admin config
+route - resolves all of this through one method,
+`getResolvedRuntimeOptions()`, at the top of each run. Nothing is captured at boot.
+A change saved in the admin is live on the very next run, with no restart.
+
+## Plugin options
+
+All three are optional. An install that passes none is configured entirely from
+the admin.
+
+| Option | Type | Default | What it does |
+| --- | --- | --- | --- |
+| `enabled` | `boolean` | `false` | Seeds the persisted toggle, once, when the settings row is first created |
+| `marginMultiplier` | `number` | none | Fallback margin when no override is saved |
+| `stalenessToleranceHours` | `number` | `120` | Fallback staleness tolerance, in hours |
+
+```ts title="medusa-config.ts"
+plugins: [
+  {
+    resolve: "@zanreal/medusa-fx-pricing",
+    options: {
+      enabled: false,
+      marginMultiplier: 1.25,
+      stalenessToleranceHours: 120,
+    },
+  },
+],
+```
+
+### The margin has no default, deliberately
+
+`marginMultiplier` is the one number in this plugin that decides what a customer
+is charged. A shipped default would be some other store's commercial preference,
+applied to your prices, without you having chosen it.
+
+So there is none. Until a margin is set - in `medusa-config.ts`, or in the admin -
+a recompute run **refuses the whole run** before fetching a single rate, records
+the reason in the run summary, and writes nothing. The settings page shows a
+warning saying the same thing in the same words.
+
+Set `1` if you genuinely want the raw NBP mid rate with no markup. That is a
+choice, and the point is that it is recorded as one.
+
+### The staleness tolerance does have a default
+
+`stalenessToleranceHours` keeps its `120`, and the asymmetry is the point: it is a
+tolerance for a public rate table's publication schedule, not a commercial
+preference. The unsafe direction is also already closed off, because setting it too
+low only skips a run - it can never price something off a rate you did not intend.
+See [Rates, and days without one](./rates.en.mdx).
+
+## Persisted settings
+
+`fx_pricing_settings` is a one-row singleton with a fixed primary key. It is
+created on first read, and a concurrent first read that loses the insert re-reads
+the winner's row rather than duplicating it.
+
+The three settings on it are not stored the same way, and the difference is
+intentional.
+
+**`enabled` is a real boolean, not a nullable override.** It is seeded once from
+`options.enabled` at the moment the row is first created, and after that the admin
+toggle is the only thing that changes it. There is no meaningful "fall back to the
+config value on every read" for a kill switch: an operator flips it, and that is
+the answer until they flip it again. Changing `options.enabled` in
+`medusa-config.ts` later has no effect on an installation that already has a
+settings row.
+
+**`margin_multiplier` and `staleness_tolerance_hours` are nullable overrides.**
+`null` means "not overridden here", and the plugin falls back to the corresponding
+plugin option on every read. Clearing an override in the admin writes `null`, which
+returns that setting to whatever `medusa-config.ts` says. When
+`margin_multiplier` is `null` *and* no `marginMultiplier` option was configured,
+there is no margin at all, and a run refuses rather than inventing one.
+
+The row also carries `last_run_at` and `last_run_summary`, which are not
+configuration but the last run's own report - written after every run, successful
+or not, and read back by the settings page.
+
+## Environment variables
+
+### `FX_PRICING_DISABLED`
+
+Forces the plugin off at runtime regardless of what is persisted. Any non-empty
+value counts, except `0` and `false` (compared case-insensitively after trimming).
+
+It can only ever force **off**, never on. An operator can still flip the persisted
+toggle while it is set, and that persisted state takes effect the moment the
+variable is cleared. The admin page shows a badge while it is in force, so nobody
+has to wonder why a toggle that reads "on" is not doing anything.
+
+Use it for an environment - staging, a deploy being investigated - where the job
+and the manual action must not run whatever the database says.
+
+### `FX_PRICING_CRON`
+
+Overrides the job's schedule. Defaults to `0 3 * * *`: once a day at 03:00, which
+is long after table A's 11:15 CET publication window has closed for the previous
+day and well before most stores' business hours, so a price change is never
+visible mid-session.
+
+This one is an environment variable rather than a plugin option for a structural
+reason, not a stylistic one. Medusa evaluates a scheduled job's `config.schedule`
+at plugin-load time, before the DI container - and therefore before this plugin's
+resolved options - exists. There is nothing to read a plugin option from at the
+moment the schedule is needed.
+
+## The admin page
+
+**Settings > FX pricing** is the plugin's only admin surface. There is
+deliberately no per-product widget: this plugin has nothing per-product to show
+that the variant's own price editor does not already show.
+
+- **Enabled** - the persisted toggle, saved immediately on flip. No separate Save
+  button, because this is a kill switch and not a form field. Shows the
+  forced-off badge when the environment variable is set.
+- **Configuration** - margin multiplier and staleness tolerance, with a Save
+  button and a **Clear saved values** action that appears once either is
+  overridden. While no margin is set anywhere, a warning explains that a recompute
+  will write nothing and why that is on purpose.
+- **Current NBP rates** - fetched live on every page load, so you can check what
+  the next run would compute before triggering it.
+- **Last run** - the timestamp and per-currency summary of the most recent run,
+  plus **Recompute now**, which runs the same logic as the scheduled job and
+  renders the result inline.
+
+## Admin API
+
+Both routes sit under `/admin/fx-pricing` and use Medusa's standard admin
+authentication.
+
+### `GET /admin/fx-pricing/config`
+
+Returns the resolved configuration, the live rates, and the last run's summary.
+
+```json
+{
+  "effectiveEnabled": true,
+  "forceDisabled": false,
+  "persistedEnabled": true,
+  "marginMultiplier": 1.25,
+  "marginMultiplierOverridden": false,
+  "stalenessToleranceHours": 120,
+  "stalenessToleranceHoursOverridden": false,
+  "lastRunAt": "2026-08-13T03:00:00.000Z",
+  "lastRunSummary": {
+    "ranAt": "2026-08-13T03:00:00.000Z",
+    "ran": true,
+    "currencies": {
+      "usd": {
+        "currencyDisabled": false,
+        "rateUnavailable": false,
+        "rateStale": false,
+        "created": 3,
+        "updated": 12,
+        "unchanged": 140,
+        "skippedManualOverride": 5,
+        "skippedNoPlnPrice": 0,
+        "rate": 3.9123,
+        "rateEffectiveDate": "2026-08-12"
+      }
+    }
+  },
+  "liveRates": {
+    "usd": { "mid": 3.9123, "effectiveDate": "2026-08-13", "tableNo": "154/A/NBP/2026" },
+    "eur": { "error": "NBP request for eur failed with status 503" }
+  }
+}
+```
+
+Three fields are worth pointing at.
+
+`persistedEnabled` and `effectiveEnabled` differ exactly when `forceDisabled` is
+true, which is what lets the page show a toggle in the "on" position alongside a
+badge explaining that the environment is overriding it.
+
+A `liveRates` entry is either a rate or an `{ "error": ... }` object, per currency
+and independently. One currency failing never fails the request.
+
+`lastRunSummary` is `null` until the first run completes. Within it, a currency
+that was not part of the run is simply absent from `currencies` rather than
+present and zeroed.
+
+### `POST /admin/fx-pricing/config`
+
+Writes an override. Body: `{ enabled?, margin_multiplier?, staleness_tolerance_hours? }`.
+Only the keys present are written. Returns the same shape as the `GET`, reflecting
+the state just saved.
+
+- `enabled` must be a boolean. It does not accept `null` - it is a real toggle,
+  not an override of a fallback.
+- `margin_multiplier` must be a finite number greater than `0` and at most `10`,
+  or `null` to clear the override. The ceiling is a guard against a fat-fingered
+  entry, not a business limit.
+- `staleness_tolerance_hours` must be an integer greater than `0` and at most
+  `720`, which is 30 days, or `null` to clear the override.
+
+An unknown key, a wrongly typed value, or a body with no writable key at all is
+rejected with a `400` naming the problem.
+
+### `POST /admin/fx-pricing/recompute`
+
+Runs the same recompute the job runs, immediately, and returns
+`{ "summary": { ... } }` with the `RunSummary` shape shown above.
+
+It does not check the toggle itself. The shared recompute function owns that check,
+so this route and the job can never disagree about whether they are allowed to
+run - when the plugin is off, both get `{ "ran": false }` and nothing is written.
+
+## Reading a run summary
+
+| Field | Meaning |
+| --- | --- |
+| `ranAt` | ISO timestamp of the run |
+| `ran` | `false` when the run did nothing because the toggle was off |
+| `error` | Present when the run failed, for example with no margin configured |
+| `currencies[code].currencyDisabled` | Not in the store's supported currencies |
+| `currencies[code].rateUnavailable` | The NBP rate could not be fetched or parsed |
+| `currencies[code].rateStale` | The newest published rate is older than the tolerance |
+| `currencies[code].created` / `updated` / `unchanged` | Prices written, moved, and already correct |
+| `currencies[code].skippedManualOverride` | Left alone, see [Manual overrides](./overrides.en.mdx) |
+| `currencies[code].skippedNoPlnPrice` | See the note below |
+| `currencies[code].rate` / `rateEffectiveDate` | The rate the run used, present whenever one was fetched |
+
+One caveat on `skippedNoPlnPrice`. Variants with no default PLN price at all are
+filtered out before planning begins, so they are never counted. In practice this
+counter only reaches a non-zero value for a variant that *has* a PLN price which
+cannot produce a real target amount, such as a non-positive one. Read it as "PLN
+prices that were unusable", not as "variants without a PLN price".
+
+## Using the workflows directly
+
+The plugin exports its workflows so a host can trigger a recompute from its own
+script, admin action or schedule:
+
+```ts
+import { recomputeFxPricesWorkflow, runFxPricingRecompute } from "@zanreal/medusa-fx-pricing/workflows";
+```
+
+`runFxPricingRecompute(container)` is the plain async function the job and the
+admin route both call. `recomputeFxPricesWorkflow` wraps it as a workflow for
+composition into a larger one.
+
+It is deliberately not compensated. Every write is a reconciliation of PLN-derived
+prices toward a target computed fresh from the current PLN price and the current
+rate, so the repair for a partial run is simply another run. A compensation that
+undid a partial recompute would leave prices further from the target than before
+the run started, not closer.

@@ -1,0 +1,176 @@
+---
+title: Overview
+description: A Medusa v2 plugin that derives USD and EUR variant prices from a store's PLN price using the NBP table A mid rate, once a day, without ever overwriting a price a human set.
+---
+
+`@zanreal/medusa-fx-pricing` answers one question, every day, for every variant
+in your catalogue: given what this costs in PLN, what should it say in USD and in
+EUR?
+
+It takes the variant's own default PLN price, divides by the NBP (Narodowy Bank
+Polski, the Polish central bank) table A mid rate, multiplies by a margin you
+choose, and writes the result as that variant's default price in the target
+currency. Then it does the same thing tomorrow.
+
+## The gap it fills
+
+Medusa's Pricing module is perfectly happy to hold a USD price next to a PLN one.
+It has no opinion at all about where the USD number came from, and no machinery
+for keeping it in step with anything.
+
+So a store selling in PLN that also wants USD and EUR listed has two options
+today. It can price them by hand, which is fine on the day it is done and
+progressively less fine every day after, as the rate moves and nobody notices. Or
+it can write a script, which every such store then writes again, slightly
+differently, and maintains alone.
+
+This plugin is that script, with the two hard parts already solved: knowing which
+rate to use on a day the central bank did not publish one, and knowing which
+prices it is allowed to touch.
+
+## The formula
+
+```text
+foreign_amount = pln_amount / nbp_rate * margin_multiplier
+```
+
+`nbp_rate` is PLN per one unit of the foreign currency, which is NBP's own
+convention, so dividing converts into that currency at the raw market mid rate.
+`margin_multiplier` then grosses it up: `1.25` puts 25% on top, `1` means you want
+the bare mid rate and nothing else.
+
+The result is rounded half-up to two decimal places. If any input cannot produce a
+real price - a PLN amount of zero, a non-positive rate, a non-positive margin -
+the function returns nothing at all rather than a guess, and the variant is
+skipped for that run. That refusal-instead-of-guess reflex runs through the whole
+plugin, and it is sharpest in the one place it matters most: there is no default
+margin. See [Settings and configuration](./settings.en.mdx).
+
+## What one run does
+
+```text
+  toggle on?  ->  no  ->  log "skipped (disabled)", write nothing
+       |
+      yes
+       v
+  margin configured?  ->  no  ->  refuse the whole run, record the reason
+       |
+      yes
+       v
+  read the store's supported currencies + every variant with its prices
+       |
+       v
+  for usd, then eur:
+       currency enabled in the store?     ->  no  ->  skip this currency
+       fetch the latest NBP table A rate  ->  fails  ->  skip this currency
+       rate older than the tolerance?     ->  yes  ->  skip this currency
+       |
+       v
+       for each variant with a default PLN price:
+           compute the target amount
+           decide: create / update / leave alone  ->  see Manual overrides
+       |
+       v
+       write the creates and updates, re-read them, stamp what we wrote
+       |
+       v
+  persist the run summary  ->  Settings > FX pricing shows it
+```
+
+Two things about that shape are worth saying out loud.
+
+**A currency is skipped whole, never per variant.** If EUR is not enabled in the
+store, or the EUR rate cannot be fetched, or the newest published EUR rate is
+older than your tolerance, the run does not attempt a single EUR write. It logs
+why, records it in the summary, and moves on to the next currency. A half-priced
+catalogue is worse than an unpriced one.
+
+**Only the default price is ever read or written.** A price scoped by a rule - a
+region override, a customer-group price, a quantity break, anything living in a
+price list - is a decision somebody made deliberately, and this plugin has no
+business near it. It reads and writes exactly the price the product edit page's
+basic price grid shows.
+
+## Install
+
+This package is not on npm yet. It installs as a git dependency, pinned to a
+commit:
+
+```jsonc title="package.json"
+{
+  "dependencies": {
+    "@zanreal/medusa-fx-pricing": "github:zanreal-labs/medusa-fx-pricing#5f00ff7801972c1fb757d58e3da98733f5bd3b7d"
+  }
+}
+```
+
+Pin to the commit you tested against. There is no published tag yet, so `#main`
+would move under you on the next push; a pinned commit means the same thing
+tomorrow that it means today.
+
+The package compiles itself on install - `prepare` runs `medusa plugin:build`,
+which turns the checked-out source into the `.medusa/server` output its `exports`
+point at. pnpm 10 and newer refuse to run that script for a dependency they do not
+already trust, so a fresh install needs it allowed once:
+
+```yaml title="pnpm-workspace.yaml"
+allowBuilds:
+  "@zanreal/medusa-fx-pricing@https://codeload.github.com/zanreal-labs/medusa-fx-pricing/tar.gz/5f00ff7801972c1fb757d58e3da98733f5bd3b7d": true
+```
+
+The key is the exact tarball URL pnpm resolves the pinned commit to, so it carries
+the same SHA as the dependency line. Move both together. Then register the plugin:
+
+```ts title="medusa-config.ts"
+module.exports = defineConfig({
+  plugins: [
+    {
+      resolve: "@zanreal/medusa-fx-pricing",
+      options: {
+        marginMultiplier: 1.25,
+      },
+    },
+  ],
+});
+```
+
+Every option is optional, including that one - an install that sets nothing is
+configured entirely from the admin instead. Then run the migrations it ships:
+
+```bash
+npx medusa db:migrate
+```
+
+## After installing, nothing happens
+
+That is deliberate, and it is the first thing to know. A fresh install is inert:
+`enabled` seeds to `false`, and while it is off both the daily job and the manual
+recompute button do nothing and say so. A plugin that repriced a live catalogue
+the moment it was installed would be a plugin nobody could safely try.
+
+Open **Settings > FX pricing**, set a margin, flip the toggle, and press
+**Recompute now** to watch a full run happen while you are looking at it. The
+summary it writes tells you, per currency, how many prices were created, how many
+updated, how many were already correct, and how many were left alone because a
+human owns them.
+
+## Requirements
+
+Node.js 22.13 or newer, and Medusa 2.18.0 - `@medusajs/admin-sdk`,
+`@medusajs/framework`, `@medusajs/icons`, `@medusajs/js-sdk`, `@medusajs/medusa`,
+`@medusajs/ui` and `react-i18next` are peer dependencies, and a Medusa project
+already has all of them. The admin page is translated into English and Polish
+under the `fxPricing.*` key namespace.
+
+## Where to go next
+
+- **[Rates, and days without one](./rates.en.mdx)** - which NBP endpoint is
+  called and why the weekend needs no special case, what the staleness tolerance
+  actually measures, and what happens when a currency is not turned on in your
+  store.
+- **[Manual overrides](./overrides.en.mdx)** - the heart of the plugin. Why the
+  ownership marker cannot live on the price row, what the stamp records, and the
+  four branches the decision takes.
+- **[Settings and configuration](./settings.en.mdx)** - every option, where each
+  one can be overridden, the two environment variables, the admin page, and the
+  two admin API routes.
