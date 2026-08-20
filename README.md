@@ -350,6 +350,41 @@ variant's USD/EUR price is plugin-managed or a manual override - an operator has
 the price editor plus the last run's summary. A widget on the product detail page (mirroring
 `medusa-product-costs`'s own widget) is the natural place for this.
 
+## Releasing
+
+Publishing happens only from
+[`.github/workflows/release.yml`](./.github/workflows/release.yml), and there is
+no second path. npm **provenance** is a signed statement about where a tarball
+was built and from which commit, and only a cloud CI run holding an OIDC
+identity can produce one. An `npm publish` from a laptop would put a version on
+npm carrying no provenance, and a published version cannot be replaced
+afterwards, only deprecated. `publishConfig.provenance` in `package.json` makes
+that local publish fail rather than quietly succeed without it.
+
+Nothing has been published yet. `@zanreal/medusa-fx-pricing` is not on the
+registry, so the pinned git dependency in [Install](#install) is still the only
+way to consume it; the first GitHub Release is what changes that.
+
+To cut a release:
+
+1. Bump `version` in `package.json` on `main`.
+2. Publish a GitHub Release whose tag is `v<version>`, exactly.
+
+The workflow refuses to publish when the tag disagrees with `package.json`, or
+when that version is already on the registry. A release marked as a prerelease
+on GitHub publishes under the `next` dist-tag, so `npm install
+@zanreal/medusa-fx-pricing` never resolves to a release candidate.
+
+Authentication is an `NPM_TOKEN` repository secret: a granular access token with
+write permission on this package. npm's trusted publishing (OIDC, with nothing
+stored in GitHub) cannot cover the *first* publish, because npmjs.com only
+offers the trusted publisher form on a package that already exists. Once the
+first version is up, add one under the package's settings on npmjs.com - GitHub
+Actions, owner `zanreal-labs`, repository `medusa-fx-pricing`, workflow
+`release.yml`, environment `npm` - and then delete the `NPM_TOKEN` secret. The
+workflow needs no edit for that: npm attempts the OIDC exchange first and falls
+back to the token only when the exchange fails.
+
 ## License
 
 MIT
