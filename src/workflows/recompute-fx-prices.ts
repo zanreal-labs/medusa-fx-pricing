@@ -123,21 +123,30 @@ export async function runFxPricingRecompute(container: MedusaContainer): Promise
         continue;
       }
 
-      const variantsWithPln = catalogVariants
-        .map((variant): VariantForPlanning => {
-          const plnPrice = findDefaultPrice(variant.prices, "pln");
-          const existingPrice = findDefaultPrice(variant.prices, currency);
-          return {
-            existingDefaultPrice: existingPrice ? { amount: existingPrice.amount, id: existingPrice.id } : null,
-            managedRecord: null,
-            plnAmount: plnPrice?.amount,
-            productId: variant.productId,
-            variantId: variant.id,
-          };
-        })
-        .filter((variant) => variant.plnAmount !== undefined);
+      const plannableVariants = catalogVariants.map((variant): VariantForPlanning => {
+        const plnPrice = findDefaultPrice(variant.prices, "pln");
+        const existingPrice = findDefaultPrice(variant.prices, currency);
+        return {
+          existingDefaultPrice: existingPrice ? { amount: existingPrice.amount, id: existingPrice.id } : null,
+          managedRecord: null,
+          plnAmount: plnPrice?.amount,
+          productId: variant.productId,
+          variantId: variant.id,
+        };
+      });
+
+      // Narrowing here keeps the managed-price read below to the variants that
+      // could actually produce a write. The variants dropped by this filter are
+      // exactly the "no default PLN price" case the summary reports, so they are
+      // counted HERE rather than inside `planCurrencyRecompute` - the planner
+      // never sees them, so its own no-PLN branch cannot count them.
+      const variantsWithPln = plannableVariants.filter((variant) => variant.plnAmount !== undefined);
+      const skippedNoPlnPrice = plannableVariants.length - variantsWithPln.length;
 
       if (variantsWithPln.length === 0) {
+        // Still report them. A store where no variant carries a PLN price is the
+        // most extreme form of this skip, not an absence of it.
+        currencySummary.skippedNoPlnPrice = skippedNoPlnPrice;
         continue;
       }
 
@@ -155,7 +164,10 @@ export async function runFxPricingRecompute(container: MedusaContainer): Promise
       currencySummary.updated = plan.updated;
       currencySummary.unchanged = plan.unchanged;
       currencySummary.skippedManualOverride = plan.skippedManualOverride;
-      currencySummary.skippedNoPlnPrice = plan.skippedNoPlnPrice;
+      // Both halves: variants filtered out above for having no PLN price at all,
+      // plus variants the planner itself refused because their PLN amount could
+      // not produce a real target (see `computeForeignAmount`).
+      currencySummary.skippedNoPlnPrice = skippedNoPlnPrice + plan.skippedNoPlnPrice;
 
       if (plan.writes.length > 0) {
         await upsertVariantPricesWorkflow(container).run({
