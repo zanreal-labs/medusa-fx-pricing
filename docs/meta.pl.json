@@ -1,5 +1,5 @@
 {
-  "title": "@zanreal/medusa-fx-pricing",
-  "description": "Codzienne przeliczanie cen wariantów na USD i EUR po średnim kursie z tabeli A NBP, z Twoją marżą i bez ruszania cen wpisanych ręcznie.",
+  "title": "Ceny walutowe",
+  "description": "@zanreal/medusa-fx-pricing to codzienne przeliczanie cen wariantów na USD i EUR po średnim kursie z tabeli A NBP, z Twoją marżą i bez ruszania cen wpisanych ręcznie.",
   "pages": ["index", "rates", "overrides", "settings"]
 }
