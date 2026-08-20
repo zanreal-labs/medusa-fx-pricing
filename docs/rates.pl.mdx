@@ -1,0 +1,128 @@
+---
+title: Kursy i dni bez kursu
+description: "Skąd bierze się kurs, dlaczego brak daty w adresie załatwia weekendy i święta, co mierzy tolerancja nieaktualności i trzy powody pominięcia całej waluty."
+---
+
+Wszystko, co ta wtyczka liczy, opiera się na jednej liczbie na walutę na dobę: na
+kursie średnim z tabeli A NBP. Ta strona opisuje, skąd ta liczba pochodzi, i co się
+dzieje w dni, w których jej nie ma.
+
+## Trzy powody pominięcia waluty
+
+Zacznijmy od końca, bo to jest to, co zobaczysz w panelu. Waluta może zostać
+pominięta w całym przebiegu z trzech powodów, rozstrzyganych zanim wtyczka
+spojrzy na jakąkolwiek cenę. Każdy z nich ustawia własną flagę w podsumowaniu, więc
+**Ustawienia > Ceny walutowe** pokażą Ci, który z nich wystąpił.
+
+| Flaga w podsumowaniu | Kiedy | Co zrobić |
+| --- | --- | --- |
+| `currencyDisabled` | Waluty nie ma wśród `supported_currencies` sklepu | Włącz ją w **Ustawienia > Sklep > Waluty** |
+| `rateUnavailable` | Kursu nie udało się pobrać albo sparsować | Sprawdź log, zwykle to chwilowa niedostępność API |
+| `rateStale` | Kurs pobrany, ale starszy niż tolerancja | Sprawdź datę kursu, ewentualnie podnieś tolerancję |
+
+Pierwszy przypadek nie jest teoretyczny. Mało który sklep ma USD i EUR włączone w
+dniu instalacji tej wtyczki. Próbowanie zapisów, które Medusa i tak odrzuci, albo
+wywrócenie zadania byłoby gorsze niż powiedzenie tego wprost i poczekanie. Po
+włączeniu waluty w ustawieniach sklepu wraca ona do gry przy najbliższym
+przebiegu, bez żadnej dodatkowej akcji.
+
+Przy `rateStale` podsumowanie i tak zapisuje `rate` oraz `rateEffectiveDate`. To
+celowe: przy odrzuconym kursie najbardziej przydaje się wiedza, jaki dokładnie
+kurs został odrzucony.
+
+## Tabela A i adres bez daty
+
+NBP publikuje tabelę A raz na dzień roboczy, o 11:15 czasu środkowoeuropejskiego.
+Niesie ona kurs średni, czyli tę wartość rynkową, do której wtyczka dokłada
+dopiero Twoją marżę.
+
+Odpytywany jest jeden adres na walutę:
+
+```text
+GET https://api.nbp.pl/api/exchangerates/rates/a/usd/
+GET https://api.nbp.pl/api/exchangerates/rates/a/eur/
+```
+
+Zwróć uwagę na to, czego tu nie ma: daty. Ten brak to cała strategia na weekendy i
+święta.
+
+W sobotę, niedzielę i polskie święto NBP tabeli nie publikuje. Ten endpoint
+odpytany w taki dzień odpowiada najświeższą opublikowaną tabelą, czyli dokładnie
+tym, co znaczy „użyj ostatniego dostępnego kursu”. Reguła „w dniu bez publikacji
+bierz kurs ostatni” nie jest więc czymś, co wtyczka implementuje, sprawdza albo
+może pomylić. To domyślne zachowanie API, które dostaje się w prezencie za to, że
+nie pyta się o nic bardziej szczegółowego.
+
+Wtyczka czyta natomiast pole `effectiveDate` z odpowiedzi i to po nim poznaje, że
+kurs ma już kilka dni.
+
+## Co jest sprawdzane przy parsowaniu
+
+`parseNbpRatesResponse` waliduje odpowiedź, zanim zobaczy ją cokolwiek innego, i
+robi to rygorystycznie z rozmysłem. NBP to stabilne, udokumentowane publiczne API,
+więc odpowiedź o innym kształcie oznacza, że coś jest naprawdę zepsute (awaria
+serwująca stronę błędu w HTML-u, zmiana łamiąca zgodność), a nie sytuację, którą
+warto po cichu przełknąć.
+
+Parser rzuca wyjątkiem, nazywając problem, gdy:
+
+- treść nie jest obiektem JSON,
+- nie ma tablicy `rates` albo jest pusta,
+- `mid` nie istnieje, nie jest liczbą, nie jest skończone albo nie jest większe od zera,
+- `effectiveDate` nie istnieje albo nie jest niepustym tekstem.
+
+Jedyne pole traktowane miękko to `tableNo`: gdy `no` od NBP nie jest tekstem,
+zostaje pustym łańcuchem zamiast wywracać parsowanie. Numer tabeli służy wyłącznie
+do audytu i diagnostyki, nic się z niego nie liczy.
+
+Wyjątek w tym miejscu nie wywraca przebiegu. Przeliczenie łapie go osobno dla
+każdej waluty, ustawia `rateUnavailable: true` w jej podsumowaniu, zapisuje
+ostrzeżenie z treścią błędu i przechodzi dalej.
+
+## Nieaktualność mierzy się kalendarzem, nie zegarem
+
+`stalenessToleranceHours` mówi, jak stary może być najnowszy opublikowany kurs,
+zanim wtyczka odmówi liczenia po nim cen. Domyślnie `120`, czyli pięć dni.
+
+Subtelność siedzi w sposobie liczenia wieku. `effectiveDate` to data kalendarzowa
+bez godziny, bo NBP publikuje raz na dzień roboczy, więc porównanie odbywa się do
+północy UTC tego dnia. Wynikają z tego dwie rzeczy i obie są tymi, o które chodzi:
+
+- **Kurs z dzisiaj nigdy nie jest nieaktualny**, niezależnie od godziny
+  uruchomienia. Zadanie startujące o 3:00 przy kursie datowanym na dziś liczy wiek
+  od dzisiejszej północy i wychodzi mu trzy godziny, a nie „publikacja minus
+  doba”.
+- **Wiek narasta od granicy doby**, a nie od jakiegoś stałego momentu „ileś godzin
+  od publikacji”, który dla samej daty po prostu nie istnieje.
+
+Data, której nie da się sparsować, jest traktowana jako nieaktualna. To kierunek
+bezpieczny: zniekształcona wartość pomija walutę w jednym przebiegu, podczas gdy
+uznanie jej za świeżą wyceniłoby katalog po dacie, której nikt nie potrafi
+odczytać.
+
+Skąd pięć dni? Dość długo, żeby przetrwać długi weekend świąteczny bez oznaczania
+każdego poniedziałkowego przebiegu jako nieaktualnego, i dość krótko, żeby wyłapać
+publikację, która naprawdę stanęła. Warto zauważyć, że to tolerancja dla
+harmonogramu publikacji publicznej tabeli kursów, a nie preferencja handlowa, i
+właśnie dlatego ma wartość domyślną, której [marża celowo nie ma](./settings.pl.mdx).
+
+## Kursy na żywo w panelu
+
+Sekcja **Aktualne kursy NBP** na stronie ustawień pobiera dane przy każdym
+wejściu na stronę, niezależnie od jakiegokolwiek przebiegu. Jest po to, żebyś mógł
+sprawdzić, co policzyłoby najbliższe przeliczenie, zanim je uruchomisz.
+
+Obie waluty pobierane są równolegle i rozstrzygane niezależnie. Błąd przy jednej
+nigdy nie wywraca całego żądania ani nie ukrywa drugiej: ta jedna renderuje się
+jako `niedostępny (<treść błędu>)`, druga normalnie, a reszta strony, czyli Twoja
+konfiguracja i podsumowanie ostatniego przebiegu, pozostaje nietknięta. Pole
+nazywa się `liveRates`, opisuje je [strona o ustawieniach](./settings.pl.mdx).
+
+## Na razie tylko USD i EUR
+
+Lista walut docelowych to dwuelementowa unia w
+`src/modules/fx-pricing/lib/nbp.ts` plus tablica `TARGET_CURRENCIES` w
+przeliczeniu. Tabela A niesie kilkadziesiąt walut, więc trzecia to rozszerzenie
+tego typu i tej tablicy, a nie przeprojektowanie. Nic w obsłudze kursów,
+matematyce marży ani śledzeniu własności cen nie jest przywiązane do tych dwóch,
+które są dziś w pakiecie.

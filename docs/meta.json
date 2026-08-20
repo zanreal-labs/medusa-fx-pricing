@@ -1,0 +1,5 @@
+{
+  "title": "@zanreal/medusa-fx-pricing",
+  "description": "USD and EUR variant prices derived daily from the NBP table A mid rate, with a margin you choose and manual prices left untouched.",
+  "pages": ["index", "rates", "overrides", "settings"]
+}

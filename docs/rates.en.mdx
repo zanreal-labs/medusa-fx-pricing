@@ -1,0 +1,133 @@
+---
+title: Rates, and days without one
+description: Which NBP endpoint the plugin calls, why a weekend needs no special case, what the staleness tolerance measures, and the three reasons a currency is skipped for a whole run.
+---
+
+Everything this plugin computes rests on one number per currency per day: the NBP
+table A mid rate. This page is about where that number comes from, and about the
+days it does not exist.
+
+## Table A, and the endpoint with no date on it
+
+NBP publishes table A once per business day, at 11:15 CET. It carries the "mid"
+(average) rate, which is the market rate this plugin uses before your margin is
+applied.
+
+The plugin calls one URL per currency:
+
+```text
+GET https://api.nbp.pl/api/exchangerates/rates/a/usd/
+GET https://api.nbp.pl/api/exchangerates/rates/a/eur/
+```
+
+Note what is missing: a date. That absence is the entire weekend and public
+holiday strategy.
+
+NBP does not publish a table on a Saturday, a Sunday, or a Polish public holiday.
+Ask this endpoint for a rate on any of those days and it answers with the most
+recently published table, which is exactly what "use the latest available rate"
+means. So the rule "on a non-publishing day, use the last published rate" is not
+something this plugin implements, checks for, or can get wrong. It is the
+endpoint's default behaviour, and the plugin gets it by not asking for anything
+more specific.
+
+What the plugin does do is read the `effectiveDate` that comes back, which is how
+it notices the rate is a few days old.
+
+## What is parsed, and what is refused
+
+`parseNbpRatesResponse` validates the body before anything else sees it, and it
+is strict on purpose. NBP is a stable, documented public API, so a response that
+does not match the expected shape means something is genuinely broken - an outage
+serving an HTML error page, or a breaking API change - not a case worth quietly
+tolerating.
+
+It throws, naming what was wrong, when:
+
+- the body is not a JSON object,
+- there is no `rates` array, or it is empty,
+- `mid` is missing, not a number, not finite, or not greater than zero,
+- `effectiveDate` is missing or not a non-empty string.
+
+`tableNo` is the one soft field: if NBP's `no` is not a string it becomes `""`
+rather than failing the parse, because the table number is kept for audit and
+debugging and nothing computes from it.
+
+A throw here does not crash the run. The recompute catches it per currency, marks
+`rateUnavailable: true` in that currency's summary, logs a warning naming the
+error, and moves on to the next currency.
+
+## Staleness: a tolerance for the calendar, not for the clock
+
+`stalenessToleranceHours` is how old the newest published rate may be before the
+plugin refuses to price off it. It defaults to `120`, which is five days.
+
+The subtlety is in how the age is measured. `effectiveDate` is a calendar date
+with no time of day, because NBP publishes once per business day, so the plugin
+compares it against midnight UTC of that date. Two consequences follow, and both
+are the ones you want:
+
+- **A same-day rate is never stale**, no matter what time the job runs. If the job
+  fires at 03:00 and the rate is dated today, its age is measured from today's
+  midnight and comes out at three hours, not "published minus one day".
+- **Age accrues from the day boundary**, not from some fixed "hours since publish"
+  instant that does not exist for a date-only value.
+
+An `effectiveDate` that cannot be parsed at all is treated as stale. That is the
+fail-closed direction: a malformed value skips a currency for one run, whereas
+treating it as fresh would price a catalogue off a date nobody can read.
+
+Why five days by default? Long enough to ride out a long holiday weekend without
+flagging every Monday run as stale, short enough to catch a publication that has
+genuinely stopped. Note that this is a tolerance for a public rate table's
+publishing schedule, not a commercial preference, which is why it keeps a default
+where [the margin deliberately does not](./settings.en.mdx).
+
+## The three ways a currency is skipped
+
+All three are decided before a single price is looked at, and all three skip the
+currency for the whole run rather than per variant. Each sets its own flag in the
+run summary, so **Settings > FX pricing** can tell you which one happened.
+
+### The currency is not enabled in the store
+
+The plugin reads the store's `supported_currencies` at the top of every run. A
+target currency that is not in that set is skipped, logged as "not enabled in the
+store's supported currencies", and reported as `currencyDisabled: true`.
+
+This is a real case, not a defensive one: not every store has USD and EUR turned
+on in **Settings > Store > Currencies** the day this plugin is installed.
+Attempting writes Medusa would reject, or crashing the job, are both worse than
+saying so and waiting. Turn the currency on and it is eligible again on the very
+next run, with no other action needed.
+
+### The rate could not be fetched
+
+A non-`ok` HTTP status, a network failure, or a body that fails the parse above.
+Reported as `rateUnavailable: true`, with the error message in the log.
+
+### The rate is stale
+
+The fetch succeeded but `effectiveDate` is older than the tolerance. Reported as
+`rateStale: true`. This one still records `rate` and `rateEffectiveDate` in the
+summary, because knowing which stale rate was rejected is the useful part.
+
+## Live rates in the admin
+
+The **Current NBP rates** panel on the settings page is fetched fresh on every page
+load, and independently of any run. It exists so you can sanity-check what the
+next run would compute before you trigger it.
+
+Both currencies are fetched in parallel and settled independently. A failure on
+one never fails the request or hides the other: that currency renders as
+`unavailable (<the error>)` while the other renders normally, and the rest of the
+page - your configuration, the last run's summary - is unaffected. See the
+`liveRates` field in [the config route](./settings.en.mdx).
+
+## Only USD and EUR, for now
+
+The target currency list is a two-value union in
+`src/modules/fx-pricing/lib/nbp.ts` plus the `TARGET_CURRENCIES` array in the
+recompute. Table A carries dozens of currencies, so a third one is an extension of
+that type and that list rather than a redesign. Nothing in the rate handling, the
+margin math, or the ownership tracking is specific to the two that ship.

@@ -38,6 +38,7 @@
     "lint": "medusa lint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "prepare": "medusa plugin:build",
     "prepublishOnly": "medusa plugin:build"
   },
   "devDependencies": {
