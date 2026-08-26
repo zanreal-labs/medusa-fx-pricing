@@ -5,6 +5,9 @@ native PLN selling price, using the NBP (Narodowy Bank Polski, the Polish centra
 mid rate plus a configurable margin. Runs on a daily schedule; a manual price edit is never
 overwritten.
 
+Full documentation, in English and Polish, is published at
+<https://zanreal.com/docs/oss/medusa-fx-pricing> and authored in [`docs/`](./docs).
+
 There is no FX-pricing plugin in the Medusa ecosystem today. A store that sells in PLN and wants
 USD/EUR listed too either prices them by hand (and lets them drift out of date as the rate moves)
 or wires up a bespoke script. This plugin is that script, packaged: a small, standalone module that
