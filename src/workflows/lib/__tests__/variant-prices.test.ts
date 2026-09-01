@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findDefaultPrice, normalizeCurrencyCodes } from "../variant-prices";
+import { findDefaultPrice, hasQuantityTieredPrice, normalizeCurrencyCodes } from "../variant-prices";
 import type { RawPrice } from "../variant-prices";
 
 describe("findDefaultPrice", () => {
@@ -37,6 +37,61 @@ describe("findDefaultPrice", () => {
       { amount: 30, currency_code: "usd", id: "price_usd_region_rule", rules_count: 2 },
     ];
     expect(findDefaultPrice(onlyRuled, "usd")).toBeUndefined();
+  });
+
+  /**
+   * Production carries nine variants priced as a six-step quantity ladder in
+   * PLN, EUR and USD. Every row in it has `rules_count = 0`, so a rules-only
+   * test would return the first tier as if it were the base price.
+   */
+  it("does not mistake a quantity-break row for the default price", () => {
+    const ladder: RawPrice[] = [
+      { amount: 100, currency_code: "pln", id: "price_tier_1", min_quantity: 1, rules_count: 0 },
+      { amount: 90, currency_code: "pln", id: "price_tier_10", min_quantity: 10, rules_count: 0 },
+      { amount: 80, currency_code: "pln", id: "price_tier_100", min_quantity: 100, rules_count: 0 },
+    ];
+    expect(findDefaultPrice(ladder, "pln")).toBeUndefined();
+  });
+
+  it("ignores a max_quantity-bounded row too", () => {
+    const bounded: RawPrice[] = [
+      { amount: 100, currency_code: "usd", id: "price_capped", max_quantity: 9, rules_count: 0 },
+    ];
+    expect(findDefaultPrice(bounded, "usd")).toBeUndefined();
+  });
+
+  it("still finds an unbounded price sitting alongside a ladder", () => {
+    const mixed: RawPrice[] = [
+      { amount: 90, currency_code: "pln", id: "price_tier_10", min_quantity: 10, rules_count: 0 },
+      { amount: 100, currency_code: "pln", id: "price_base", rules_count: 0 },
+    ];
+    expect(findDefaultPrice(mixed, "pln")?.id).toBe("price_base");
+  });
+});
+
+describe("hasQuantityTieredPrice", () => {
+  const ladder: RawPrice[] = [
+    { amount: 100, currency_code: "pln", id: "price_tier_1", min_quantity: 1, rules_count: 0 },
+    { amount: 27.5, currency_code: "usd", id: "price_usd", rules_count: 0 },
+  ];
+
+  it("is true for a currency priced with a quantity bound", () => {
+    expect(hasQuantityTieredPrice(ladder, "pln")).toBe(true);
+  });
+
+  it("is false for a currency with only an unbounded price", () => {
+    expect(hasQuantityTieredPrice(ladder, "usd")).toBe(false);
+  });
+
+  it("is false for a currency with no price at all", () => {
+    expect(hasQuantityTieredPrice(ladder, "eur")).toBe(false);
+  });
+
+  it("ignores a rule-scoped price, which is a different kind of skip", () => {
+    const ruled: RawPrice[] = [
+      { amount: 30, currency_code: "usd", id: "price_ruled", min_quantity: 5, rules_count: 1 },
+    ];
+    expect(hasQuantityTieredPrice(ruled, "usd")).toBe(false);
   });
 });
 

@@ -19,14 +19,25 @@ function isRateError(rate: LiveRateDTO | LiveRateErrorDTO): rate is LiveRateErro
 }
 
 interface CurrencyRunSummaryDTO {
+  /** `false` means the run ended before this currency's turn - not that it was fine. */
+  reached: boolean;
   currencyDisabled: boolean;
   rateUnavailable: boolean;
   rateStale: boolean;
+  /** What the run intended to write, before it wrote anything. */
+  plannedCreates: number;
+  plannedUpdates: number;
+  /** What actually landed AND was stamped. */
   created: number;
   updated: number;
   unchanged: number;
   skippedManualOverride: number;
   skippedNoPlnPrice: number;
+  skippedQuantityTiered: number;
+  /** Written but unstamped - this plugin can never touch those prices again. */
+  stampFailed: number;
+  failed: boolean;
+  error?: string;
   rate?: number;
   rateEffectiveDate?: string;
 }
@@ -35,7 +46,11 @@ interface RunSummaryDTO {
   ranAt: string;
   ran: boolean;
   currencies: Partial<Record<"usd" | "eur", CurrencyRunSummaryDTO>>;
+  /** Prices written and stamped across every currency. `0` on a completed run is reported, not hidden. */
+  pricesWritten: number;
   error?: string;
+  errorName?: string;
+  errorStack?: string;
 }
 
 interface ConfigResponse {
@@ -92,6 +107,20 @@ const CurrencySummaryLine = ({
       </Text>
     );
   }
+  if (summary.reached === false) {
+    return (
+      <Text className="text-ui-fg-error" size="small">
+        {t("fxPricing.summary.notReached", { code })}
+      </Text>
+    );
+  }
+  if (summary.failed) {
+    return (
+      <Text className="text-ui-fg-error" size="small">
+        {t("fxPricing.summary.failed", { code, error: summary.error })}
+      </Text>
+    );
+  }
   if (summary.currencyDisabled) {
     return (
       <Text className="text-ui-fg-subtle" size="small">
@@ -114,17 +143,44 @@ const CurrencySummaryLine = ({
     );
   }
   return (
-    <Text className="text-ui-fg-subtle" size="small">
-      {t("fxPricing.summary.line", {
-        code,
-        rate: summary.rate,
-        date: summary.rateEffectiveDate,
-        created: summary.created,
-        updated: summary.updated,
-        unchanged: summary.unchanged,
-        skippedManualOverride: summary.skippedManualOverride,
-        skippedNoPlnPrice: summary.skippedNoPlnPrice,
-      })}
+    <>
+      <Text className="text-ui-fg-subtle" size="small">
+        {t("fxPricing.summary.line", {
+          code,
+          rate: summary.rate,
+          date: summary.rateEffectiveDate,
+          created: summary.created,
+          plannedCreates: summary.plannedCreates,
+          updated: summary.updated,
+          plannedUpdates: summary.plannedUpdates,
+          unchanged: summary.unchanged,
+          skippedManualOverride: summary.skippedManualOverride,
+          skippedNoPlnPrice: summary.skippedNoPlnPrice,
+          skippedQuantityTiered: summary.skippedQuantityTiered,
+        })}
+      </Text>
+      {summary.stampFailed > 0 ? (
+        <Text className="text-ui-fg-error" size="small">
+          {t("fxPricing.summary.stampFailed", { code, count: summary.stampFailed })}
+        </Text>
+      ) : null}
+    </>
+  );
+};
+
+/**
+ * A completed run that wrote nothing is the failure mode that looks like
+ * success, so it gets a line of its own rather than being left for the reader
+ * to infer from a row of zeroes.
+ */
+const NothingWrittenWarning = ({ summary }: { summary: RunSummaryDTO }) => {
+  const { t } = useTranslation();
+  if (!summary.ran || summary.error || summary.pricesWritten !== 0) {
+    return null;
+  }
+  return (
+    <Text className="text-ui-fg-error" size="small">
+      {t("fxPricing.summary.nothingWritten")}
     </Text>
   );
 };
@@ -390,6 +446,7 @@ const FxPricingSettingsPage = () => {
           <div className="flex flex-col gap-y-1">
             <CurrencySummaryLine code="USD" summary={config.lastRunSummary.currencies.usd} />
             <CurrencySummaryLine code="EUR" summary={config.lastRunSummary.currencies.eur} />
+            <NothingWrittenWarning summary={config.lastRunSummary} />
             {config.lastRunSummary.error ? (
               <Text className="text-ui-fg-error" size="small">
                 {t("fxPricing.lastRun.runError", { error: config.lastRunSummary.error })}
@@ -409,6 +466,7 @@ const FxPricingSettingsPage = () => {
             </Text>
             <CurrencySummaryLine code="USD" summary={recomputeResult.currencies.usd} />
             <CurrencySummaryLine code="EUR" summary={recomputeResult.currencies.eur} />
+            <NothingWrittenWarning summary={recomputeResult} />
           </div>
         ) : null}
       </div>

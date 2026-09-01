@@ -19,6 +19,15 @@ export interface VariantForPlanning {
   existingDefaultPrice: ExistingDefaultPrice | null;
   /** This plugin's tracked record for the same variant+currency, or `null` if it has never written one. */
   managedRecord: ManagedPriceRecord | null;
+  /**
+   * `true` when the target currency is priced as a quantity ladder
+   * (`min_quantity`/`max_quantity` bounded rows, which carry `rules_count = 0`
+   * and so look like default prices to a rules-only test), or when PLN is a
+   * ladder with no unbounded row to derive from. Either way there is no single
+   * amount to convert and no single row to write, so the variant is skipped
+   * under its own counter - see `hasQuantityTieredPrice`.
+   */
+  quantityTiered: boolean;
 }
 
 /** One price this plugin has decided to create or update, still to be written. */
@@ -41,10 +50,20 @@ export interface CurrencyPlan {
   skippedManualOverride: number;
   /** No default PLN price, or a PLN amount that could not produce a real target (see `computeForeignAmount`). */
   skippedNoPlnPrice: number;
+  /** Priced as a quantity ladder - see `VariantForPlanning.quantityTiered`. */
+  skippedQuantityTiered: number;
 }
 
 function emptyPlan(): CurrencyPlan {
-  return { created: 0, skippedManualOverride: 0, skippedNoPlnPrice: 0, unchanged: 0, updated: 0, writes: [] };
+  return {
+    created: 0,
+    skippedManualOverride: 0,
+    skippedNoPlnPrice: 0,
+    skippedQuantityTiered: 0,
+    unchanged: 0,
+    updated: 0,
+    writes: [],
+  };
 }
 
 /**
@@ -62,6 +81,14 @@ export function planCurrencyRecompute(
   const plan = emptyPlan();
 
   for (const variant of variants) {
+    // Checked before the PLN amount, because a tiered variant has no unbounded
+    // PLN price either - counting it as "no PLN price" would send an operator
+    // looking for a missing price that is not missing.
+    if (variant.quantityTiered) {
+      plan.skippedQuantityTiered += 1;
+      continue;
+    }
+
     if (variant.plnAmount === undefined) {
       plan.skippedNoPlnPrice += 1;
       continue;

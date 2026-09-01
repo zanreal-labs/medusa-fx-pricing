@@ -117,15 +117,39 @@ export interface ResolvedRuntimeOptions {
 export const MARGIN_NOT_CONFIGURED_MESSAGE =
   "No margin multiplier is configured, so nothing was priced. Set one under Settings > FX pricing (for example 1.25 for a 25% markup, or 1 for no markup). This plugin ships without a default margin on purpose - it will not invent a markup and reprice your catalog behind your back.";
 
-/** Per-currency counters for one recompute run, surfaced in the admin and persisted on the settings row. */
+/**
+ * Per-currency counters for one recompute run, surfaced in the admin and
+ * persisted on the settings row.
+ *
+ * The counters are split into what the run PLANNED and what actually LANDED,
+ * because the 2026-08-27 production run reported `created: 61` while
+ * `fx_managed_price` held zero rows and no `price` row had been written at all.
+ * Both numbers were being read off the plan, which is computed before the first
+ * write; the write then failed and the plan was persisted as if it were a
+ * result. A summary that cannot tell "we intended 61" apart from "61 exist" is
+ * not a report, it is a wish - so both are kept, and `created`/`updated` now
+ * only count a price that was written AND stamped.
+ */
 export interface CurrencyRunSummary {
+  /**
+   * Whether the run reached this currency at all. `false` means the run ended
+   * before this currency's turn - the 2026-08-27 run omitted `eur` from the
+   * report entirely rather than saying this, which read as "EUR was fine".
+   */
+  reached: boolean;
   /** Currency not enabled in the store's `supported_currencies` - nothing was attempted. */
   currencyDisabled: boolean;
   /** The NBP rate could not be fetched/parsed this run - nothing was attempted. */
   rateUnavailable: boolean;
   /** The fetched rate is older than the staleness tolerance - nothing was attempted. */
   rateStale: boolean;
+  /** Prices the plan decided to create, before anything was written. */
+  plannedCreates: number;
+  /** Prices the plan decided to update, before anything was written. */
+  plannedUpdates: number;
+  /** Prices created AND stamped. A price that failed either half is not counted here. */
   created: number;
+  /** Prices updated AND re-stamped. */
   updated: number;
   /** Already at the target amount and still plugin-managed - nothing to write. */
   unchanged: number;
@@ -133,6 +157,26 @@ export interface CurrencyRunSummary {
   skippedManualOverride: number;
   /** Variant had no default PLN price to convert from. */
   skippedNoPlnPrice: number;
+  /**
+   * Variant whose prices in this currency (or in PLN) are a quantity ladder -
+   * `min_quantity`/`max_quantity` bounded rows - so there is no single default
+   * price to derive from or write to. Skipped, and counted here rather than
+   * being silently rolled into `skippedManualOverride`, because the reason and
+   * the remedy are completely different.
+   */
+  skippedQuantityTiered: number;
+  /**
+   * Prices this run wrote but could NOT record an ownership stamp for. Every
+   * one of them is a price this plugin will treat as somebody else's work
+   * forever after (an unstamped price is a manual override by definition - see
+   * `decidePriceAction`), so this number is never routine and is logged as a
+   * warning, not an info.
+   */
+  stampFailed: number;
+  /** This currency's pass threw. `error` says how; the run still moves on to the next currency. */
+  failed: boolean;
+  /** The failure for this currency, preserved through `describeError`. */
+  error?: string;
   rate?: number;
   rateEffectiveDate?: string;
 }
@@ -151,7 +195,20 @@ export interface RunSummary {
   /** `false` when the run did nothing because the toggle was off - see the job. */
   ran: boolean;
   currencies: Partial<Record<FxSourceCurrency, CurrencyRunSummary>>;
+  /**
+   * Prices written AND stamped across every currency in this run. This is the
+   * number that answers "did anything actually change?", and a completed run
+   * that leaves it at `0` says so loudly (a warning in the log, a warning in
+   * the admin) instead of looking clean - a plugin that decides to touch
+   * nothing and reports nothing is indistinguishable from one that works.
+   */
+  pricesWritten: number;
+  /** The failure that ended the run, as a human-readable message. Never `"[object Object]"` - see `describeError`. */
   error?: string;
+  /** The thrown value's class/name, when it carried one. */
+  errorName?: string;
+  /** The thrown value's stack, when it carried one. Medusa's serialized workflow errors do. */
+  errorStack?: string;
 }
 
 /** The `fx_managed_price` row, as returned from the service. */
