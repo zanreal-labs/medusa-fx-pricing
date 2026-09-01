@@ -140,10 +140,13 @@ gone and the price still present, the next run lands on branch 2 and still skips
 The run summary counts every branch, per currency, and **Settings > FX pricing**
 renders it:
 
-- `created` - branch 1
-- `updated` - a live price moved to a new target
+- `plannedCreates` / `plannedUpdates` - what the run decided to do
+- `created` - branch 1, and only counting prices that landed **and** were stamped
+- `updated` - a live price moved to a new target, again only once stamped
 - `unchanged` - already at the target and still plugin-managed
 - `skippedManualOverride` - branches 2, 3 and 4 combined
+- `skippedQuantityTiered` - the variant is priced as a quantity ladder, see below
+- `stampFailed` - written, but the stamp did not land. See below
 
 A healthy steady state is a large `unchanged`, a small `updated` as the rate
 drifts, and a `skippedManualOverride` that matches the number of prices your team
@@ -152,8 +155,28 @@ is worth investigating: something else in your stack is writing default prices.
 
 ## What it never touches at all
 
-Only the **default** price in a currency - no price list, no price rules - is ever
-read or written, in either direction. The check is `!rules_count` on the price row.
-A region override, a customer-group price, a quantity break or anything inside a
-price list is invisible to this plugin: not skipped as an override, simply never
-looked at.
+Only the **default** price in a currency is ever read or written, in either
+direction: no price list, no price rules, **and no quantity bound**. A region
+override, a customer-group price, a quantity break or anything inside a price list
+is invisible to this plugin.
+
+The quantity half of that test is easy to get wrong, so it is worth spelling out.
+Medusa stores a quantity ladder as `min_quantity`/`max_quantity` COLUMNS on the
+price row, not as price rules - so `rules_count` is `0` on every step of a ladder,
+and a `!rules_count` check on its own would happily pick the first tier and treat
+it as the base price. The check is `!rules_count && min_quantity == null &&
+max_quantity == null`. A variant priced as a ladder has no unbounded price to
+derive from or write to, so it is skipped and counted under
+`skippedQuantityTiered` rather than being rolled into `skippedManualOverride` -
+the reason and the remedy are different, and an operator reading "manual override"
+would go looking for a manual edit that never happened.
+
+## A write that is not stamped
+
+The stamp is written after the price, from a re-read of what the database actually
+holds - and `created`/`updated` only count a price once both halves are done. If a
+price is written but the stamp cannot be recorded, that is counted as
+`stampFailed`, logged as a warning, and shown in the admin, because it is the one
+outcome that quietly costs you a variant: the next run sees a price it has no
+record of writing, and branch 2 above skips it permanently. Delete such a price to
+put the next run back on branch 1.

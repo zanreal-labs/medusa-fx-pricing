@@ -43,7 +43,11 @@
       "currencyDisabled": "{{code}}: skipped - not enabled in the store's supported currencies",
       "rateUnavailable": "{{code}}: skipped - the NBP rate could not be fetched",
       "rateStale": "{{code}}: skipped - the latest NBP rate ({{date}}) is older than the staleness tolerance",
-      "line": "{{code}}: rate {{rate}} ({{date}}) - created {{created}}, updated {{updated}}, unchanged {{unchanged}}, manual overrides skipped {{skippedManualOverride}}, no PLN price {{skippedNoPlnPrice}}"
+      "line": "{{code}}: rate {{rate}} ({{date}}) - created {{created}} of {{plannedCreates}} planned, updated {{updated}} of {{plannedUpdates}} planned, unchanged {{unchanged}}, manual overrides skipped {{skippedManualOverride}}, no PLN price {{skippedNoPlnPrice}}, quantity-tiered {{skippedQuantityTiered}}",
+      "notReached": "{{code}}: the run ended before this currency was priced - see the error below",
+      "failed": "{{code}}: failed - {{error}}",
+      "stampFailed": "{{code}}: {{count}} price(s) were written but could not be recorded as plugin-owned. This plugin will treat them as manual overrides from now on and never update them - delete those prices to hand them back.",
+      "nothingWritten": "This run completed without writing a single price. The counts above say why."
     },
     "toasts": {
       "enabled": "FX pricing enabled.",

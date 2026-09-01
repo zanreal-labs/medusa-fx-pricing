@@ -138,10 +138,13 @@ przebieg trafia na ścieżkę 2 i dalej pomija.
 Podsumowanie przebiegu liczy każdą ścieżkę osobno dla każdej waluty, a
 **Ustawienia > Ceny walutowe** to renderują:
 
-- `created` - ścieżka 1
-- `updated` - żywa cena przesunęła się na nowy cel
+- `plannedCreates` / `plannedUpdates` - co przebieg postanowił zrobić
+- `created` - ścieżka 1, liczona dopiero, gdy cena zapisała się **i** została oznaczona
+- `updated` - żywa cena przesunęła się na nowy cel, znów dopiero po oznaczeniu
 - `unchanged` - już równa celowi i wciąż prowadzona przez wtyczkę
 - `skippedManualOverride` - ścieżki 2, 3 i 4 razem
+- `skippedQuantityTiered` - wariant jest wyceniony progami ilościowymi, zobacz niżej
+- `stampFailed` - zapisane, ale oznaczenie nie doszło. Zobacz niżej
 
 Zdrowy stan ustalony to duże `unchanged`, niewielkie `updated` w miarę dryfowania
 kursu i `skippedManualOverride` na poziomie liczby cen, o których Twój zespół wie,
@@ -150,8 +153,28 @@ edytował, warto to sprawdzić: coś innego w Twoim wdrożeniu zapisuje ceny dom
 
 ## Czego nie dotyka w ogóle
 
-Czytana i zapisywana jest wyłącznie cena **domyślna** w danej walucie, czyli bez
-cennika i bez reguł. Sprawdzeniem jest `!rules_count` na wierszu ceny. Nadpisanie
-regionalne, cena dla grupy klientów, próg ilościowy czy cokolwiek wewnątrz cennika
-są dla tej wtyczki niewidoczne: nie są pomijane jako nadpisania, po prostu nigdy nie
-trafiają jej przed oczy.
+Czytana i zapisywana jest wyłącznie cena **domyślna** w danej walucie: bez
+cennika, bez reguł i **bez progu ilościowego**. Nadpisanie regionalne, cena dla
+grupy klientów, próg ilościowy czy cokolwiek wewnątrz cennika są dla tej wtyczki
+niewidoczne.
+
+Część o progach ilościowych łatwo przeoczyć, więc warto ją powiedzieć wprost.
+Medusa trzyma drabinkę ilościową w KOLUMNACH `min_quantity`/`max_quantity` wiersza
+ceny, a nie w regułach - `rules_count` jest więc równe `0` na każdym szczeblu
+drabinki, a samo sprawdzenie `!rules_count` bez wahania wzięłoby pierwszy próg za
+cenę podstawową. Sprawdzeniem jest `!rules_count && min_quantity == null &&
+max_quantity == null`. Wariant wyceniony drabinką nie ma ceny bez progu, z której
+dałoby się przeliczyć ani na którą dałoby się zapisać, więc jest pomijany i
+liczony w `skippedQuantityTiered`, a nie wrzucany do `skippedManualOverride` -
+powód i lekarstwo są inne, a osoba czytająca „ręczne nadpisanie” szukałaby edycji,
+której nikt nie zrobił.
+
+## Zapis bez oznaczenia
+
+Oznaczenie zapisywane jest po cenie, na podstawie ponownego odczytu tego, co
+naprawdę jest w bazie - a `created`/`updated` liczą cenę dopiero, gdy obie połowy
+się udały. Jeśli cena się zapisała, ale oznaczenia nie da się odnotować, trafia to
+do `stampFailed`, ląduje w logu jako ostrzeżenie i jest widoczne w panelu, bo to
+jedyny wynik, który po cichu kosztuje wariant: kolejny przebieg widzi cenę, o
+której nie ma śladu, że ją pisał, i ścieżka 2 pomija ją na stałe. Usunięcie takiej
+ceny stawia następny przebieg z powrotem na ścieżce 1.

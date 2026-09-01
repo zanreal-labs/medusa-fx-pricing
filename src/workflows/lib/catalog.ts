@@ -4,6 +4,26 @@ import type { RawPrice } from "./variant-prices";
 
 const PAGE_SIZE = 200;
 
+/**
+ * The variant + price columns every read in this file selects, named once so
+ * the catalog scan and the post-write re-read cannot drift apart.
+ *
+ * `min_quantity`/`max_quantity` are load-bearing, not decoration: Medusa stores
+ * a quantity ladder as columns on `price` rather than as `price_rules`, so
+ * without them a tiered row is indistinguishable from a base price and
+ * `isDefaultPrice` would wave one through - see `variant-prices.ts`.
+ */
+const VARIANT_PRICE_FIELDS = [
+  "id",
+  "product_id",
+  "prices.id",
+  "prices.amount",
+  "prices.currency_code",
+  "prices.rules_count",
+  "prices.min_quantity",
+  "prices.max_quantity",
+];
+
 interface QueryGraph {
   graph: (input: {
     entity: string;
@@ -29,6 +49,8 @@ function toPrices(raw: unknown): RawPrice[] {
       amount: Number(price.amount),
       currency_code: price.currency_code as string,
       id: price.id as string,
+      max_quantity: typeof price.max_quantity === "number" ? price.max_quantity : null,
+      min_quantity: typeof price.min_quantity === "number" ? price.min_quantity : null,
       rules_count: typeof price.rules_count === "number" ? price.rules_count : 0,
     }));
 }
@@ -49,7 +71,7 @@ export async function listCatalogVariants(container: MedusaContainer): Promise<C
   for (let page = 0; ; page += 1) {
     const { data } = await query.graph({
       entity: "product_variant",
-      fields: ["id", "product_id", "prices.id", "prices.amount", "prices.currency_code", "prices.rules_count"],
+      fields: VARIANT_PRICE_FIELDS,
       pagination: { skip: page * PAGE_SIZE, take: PAGE_SIZE },
     });
 
@@ -94,7 +116,7 @@ export async function fetchVariantPricesByIds(
     const chunk = variantIds.slice(offset, offset + PAGE_SIZE);
     const { data } = await query.graph({
       entity: "product_variant",
-      fields: ["id", "prices.id", "prices.amount", "prices.currency_code", "prices.rules_count"],
+      fields: VARIANT_PRICE_FIELDS,
       filters: { id: chunk },
     });
     for (const row of data) {
@@ -132,4 +154,49 @@ export async function fetchStoreSupportedCurrencyCodes(
     .map((currency) => currency.currency_code)
     .filter((code): code is string => typeof code === "string");
   return new Set(codes.map((code) => code.trim().toLowerCase()));
+}
+
+/**
+ * The `PriceSet` linked to each of the given variants, keyed by variant id.
+ *
+ * Every variant that already has any price has exactly one price set, joined to
+ * it through the `product_variant_price_set` link table - and the link module
+ * enforces that "exactly one" (neither side of that link is declared
+ * `hasMany`), which is why writing a price means adding it to the EXISTING
+ * price set rather than creating a second one. Queried here the same way core's
+ * own `upsertVariantPricesWorkflow` queries it, and the same way the sibling
+ * `srp-store-price` script in `zanreal-labs/medusa` does.
+ *
+ * A variant with no row here has never been priced in any currency. It has no
+ * price set to add to, so this plugin cannot create its first price on its own
+ * - see `runFxPricingRecompute`, which reports those under
+ * `skippedNoPlnPrice` (a variant with no price set has no PLN price either).
+ */
+export async function fetchPriceSetIdsByVariantIds(
+  container: MedusaContainer,
+  variantIds: readonly string[],
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  if (variantIds.length === 0) {
+    return result;
+  }
+  const query = container.resolve<QueryGraph>(ContainerRegistrationKeys.QUERY);
+
+  for (let offset = 0; offset < variantIds.length; offset += PAGE_SIZE) {
+    const chunk = variantIds.slice(offset, offset + PAGE_SIZE);
+    const { data } = await query.graph({
+      entity: "product_variant_price_set",
+      fields: ["variant_id", "price_set_id"],
+      filters: { variant_id: chunk },
+    });
+    for (const row of data) {
+      const variantId = row.variant_id as string | null;
+      const priceSetId = row.price_set_id as string | null;
+      if (variantId && priceSetId) {
+        result.set(variantId, priceSetId);
+      }
+    }
+  }
+
+  return result;
 }

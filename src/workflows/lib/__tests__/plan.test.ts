@@ -11,6 +11,7 @@ function variant(overrides: Partial<VariantForPlanning>): VariantForPlanning {
     managedRecord: null,
     plnAmount: 100,
     productId: "prod_1",
+    quantityTiered: false,
     variantId: "variant_1",
     ...overrides,
   };
@@ -121,9 +122,21 @@ describe("planCurrencyRecompute", () => {
       created: 0,
       skippedManualOverride: 0,
       skippedNoPlnPrice: 0,
+      skippedQuantityTiered: 0,
       unchanged: 0,
       updated: 0,
       writes: [],
     });
+  });
+
+  it("skips a quantity-tiered variant under its own counter, not as a missing PLN price", () => {
+    const plan = planCurrencyRecompute(
+      [variant({ plnAmount: undefined, quantityTiered: true })],
+      RATE,
+      MARGIN,
+    );
+    expect(plan.skippedQuantityTiered).toBe(1);
+    expect(plan.skippedNoPlnPrice).toBe(0);
+    expect(plan.writes).toHaveLength(0);
   });
 });

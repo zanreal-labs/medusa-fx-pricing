@@ -43,7 +43,11 @@
       "currencyDisabled": "{{code}}: pominięto, waluta nie jest włączona wśród walut obsługiwanych przez sklep",
       "rateUnavailable": "{{code}}: pominięto, nie udało się pobrać kursu NBP",
       "rateStale": "{{code}}: pominięto, najnowszy kurs NBP ({{date}}) jest starszy niż dopuszczalna tolerancja",
-      "line": "{{code}}: kurs {{rate}} ({{date}}), utworzono {{created}}, zaktualizowano {{updated}}, bez zmian {{unchanged}}, pominięto ręcznych nadpisań {{skippedManualOverride}}, brak ceny w PLN {{skippedNoPlnPrice}}"
+      "line": "{{code}}: kurs {{rate}} ({{date}}) - utworzono {{created}} z {{plannedCreates}} zaplanowanych, zaktualizowano {{updated}} z {{plannedUpdates}} zaplanowanych, bez zmian {{unchanged}}, pominięto ceny ustawione ręcznie {{skippedManualOverride}}, bez ceny w PLN {{skippedNoPlnPrice}}, ceny progowe (od ilości) {{skippedQuantityTiered}}",
+      "notReached": "{{code}}: przeliczenie przerwało się, zanim doszło do tej waluty - powód poniżej",
+      "failed": "{{code}}: nie powiodło się - {{error}}",
+      "stampFailed": "{{code}}: zapisano {{count}} cen, ale nie udało się odnotować ich jako należących do wtyczki. Od tej pory wtyczka uzna je za ceny ustawione ręcznie i nigdy ich nie zaktualizuje - żeby oddać je wtyczce, trzeba te ceny usunąć.",
+      "nothingWritten": "To przeliczenie nie zapisało ani jednej ceny. Powód widać w liczbach powyżej."
     },
     "toasts": {
       "enabled": "Przeliczanie cen walutowych włączone.",

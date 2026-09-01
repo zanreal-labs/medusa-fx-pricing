@@ -27,6 +27,9 @@ price, once a day, and gets out of the way of anything a human has already price
 - **Never touches a price a human has set.** The moment a USD/EUR price is created or edited by
   anything other than this plugin, it is permanently left alone - see "How manual overrides stay
   sacred" below for the exact mechanism.
+- **Leaves a quantity ladder alone.** A variant whose prices carry `min_quantity`/`max_quantity`
+  bounds has no single default price to derive from or write to, so it is skipped and reported
+  under its own counter - see "Quantity ladders" below.
 - Skips a currency gracefully (logs why, does not crash) when it is not yet enabled in the store's
   `supported_currencies`, when the NBP rate cannot be fetched, or when the latest published rate is
   older than a configurable staleness tolerance.
@@ -70,6 +73,46 @@ Only the variant's **default** price in a currency (no price-list, no price-rule
 same one the admin product edit page's basic price grid shows) is ever read or written. A
 region-specific, customer-group, or price-list price is a different, deliberately-configured price
 this plugin has no business touching.
+
+The stamp is written **after** the price, from a re-read of what the database actually holds, and
+the run summary's `created`/`updated` only count a price once both halves have landed. A price
+written whose stamp could not be recorded is counted as `stampFailed`, logged as a warning, and
+surfaced in the admin - it is the one outcome that silently costs you a variant, because the next
+run sees a price it has no record of writing and skips it forever. Deleting such a price hands it
+back.
+
+### Quantity ladders
+
+Medusa stores a quantity break as `min_quantity`/`max_quantity` **columns on the price row**, not
+as `price_rules` - so `rules_count` is `0` on every step of a ladder, and a `!rules_count` test on
+its own would pick the first tier and treat it as the base price. The default-price test is
+therefore `!rules_count && min_quantity == null && max_quantity == null`. A variant priced as a
+ladder has no unbounded price to convert from or write to, so it is skipped and counted under
+`skippedQuantityTiered` rather than being folded into `skippedManualOverride`: the reason and the
+remedy are different, and "manual override" would send an operator looking for an edit nobody made.
+
+## How a price is actually written
+
+Two pricing-module primitives, and deliberately not `upsertVariantPricesWorkflow`:
+
+- **`addPrices({ priceSetId, prices })`** appends one price to the variant's existing price set.
+- **`updatePrices([{ id, amount }])`** moves one existing price row's amount by id.
+
+Both are generated onto the pricing module service from its `Price` model, so they exist on the
+instance without being declared on `IPricingModuleService`; the plugin asserts both are present at
+the start of a run and refuses the run naming the problem if they are not, rather than discovering
+it halfway through a currency.
+
+Core's `upsertVariantPricesWorkflow` looks like the obvious call and is the wrong one in both of
+its branches. It splits its input on `previousVariantIds`: a variant *not* in that list gets a
+**brand-new `PriceSet`** created and linked to it - but neither side of the
+`ProductVariantPriceSet` link is declared `hasMany`, so `RemoteLink.create` rejects the second link
+for a variant that already has a price set with `Cannot create multiple links between
+'productService' and 'pricingService'`. A variant *in* the list goes to `updatePriceSets`, which
+**replaces** the price set's price list: it deletes every existing default price whose id is not in
+the incoming array, so handing it one USD price would delete the variant's PLN price. The sibling
+`srp-store-price` script in `zanreal-labs/medusa` reached the same two primitives for the same
+reason; see `src/workflows/lib/price-writes.ts` for the full write-up.
 
 ## Install
 
@@ -211,6 +254,23 @@ because this plugin has nothing per-product to show that is not already the vari
   unchanged/skipped counts, or why a currency was skipped entirely), plus a **Recompute now**
   button that runs the same logic as the scheduled job and shows its result inline.
 
+### What the run summary promises
+
+- **Every target currency is always present.** A currency the run never got to carries
+  `reached: false`; a currency whose own pass threw carries `failed: true` and its `error`, and the
+  next currency is still attempted. A currency is never simply missing from the report.
+- **`created`/`updated` count prices that landed AND were stamped.** What the run intended is kept
+  separately as `plannedCreates`/`plannedUpdates`, so the two can be compared instead of confused.
+- **An error is preserved, not stringified.** A Medusa workflow throws the orchestrator's
+  *serialized* error - a plain object, not an `Error` instance - so `String(err)` renders it as
+  `"[object Object]"`. `describeError` reads the message, name and stack off whatever was actually
+  thrown, including nested `{ action, error }` wrappers, and falls back to JSON rather than to
+  nothing.
+- **A run that writes nothing says so.** `pricesWritten` is the total across every currency, and a
+  completed run that leaves it at `0` logs a warning with the counts that explain why and shows a
+  line in the admin. A plugin that decides to touch nothing and reports nothing is
+  indistinguishable from one that works.
+
 ## Admin API
 
 All routes are under `/admin/fx-pricing` and use Medusa's standard admin authentication.
@@ -232,16 +292,23 @@ The resolved runtime configuration, the live NBP rates, and the last run's summa
   "lastRunSummary": {
     "ranAt": "2026-08-13T03:00:00.000Z",
     "ran": true,
+    "pricesWritten": 15,
     "currencies": {
       "usd": {
+        "reached": true,
         "currencyDisabled": false,
         "rateUnavailable": false,
         "rateStale": false,
+        "failed": false,
+        "plannedCreates": 3,
+        "plannedUpdates": 12,
         "created": 3,
         "updated": 12,
         "unchanged": 140,
         "skippedManualOverride": 5,
         "skippedNoPlnPrice": 2,
+        "skippedQuantityTiered": 0,
+        "stampFailed": 0,
         "rate": 3.9123,
         "rateEffectiveDate": "2026-08-12"
       },
@@ -325,10 +392,12 @@ The pure business logic has exhaustive unit tests and no framework dependency:
   (`isRateStale`).
 - `src/modules/fx-pricing/lib/compute.ts` - the margin math (`computeForeignAmount`).
 - `src/modules/fx-pricing/lib/decision.ts` - the manual-override decision (`decidePriceAction`).
+- `src/modules/fx-pricing/lib/errors.ts` - reducing any thrown value to a real message
+  (`describeError`), including Medusa's serialized non-`Error` workflow throws.
 - `src/workflows/lib/plan.ts` - `planCurrencyRecompute`, which runs `decidePriceAction` across a
   whole batch of variants and tallies the result, still with no I/O.
 - `src/workflows/lib/variant-prices.ts` - reading a variant's default price out of its raw price
-  list (`findDefaultPrice`).
+  list (`findDefaultPrice`, `hasQuantityTieredPrice`).
 
 `src/workflows/recompute-fx-prices.ts` (the orchestration: fetching rates, querying the catalog,
 calling `upsertVariantPricesWorkflow`, re-reading and stamping the result), the scheduled job, and

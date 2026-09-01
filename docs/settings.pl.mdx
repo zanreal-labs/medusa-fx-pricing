@@ -168,18 +168,25 @@ Zwraca rozwiązaną konfigurację, kursy na żywo i podsumowanie ostatniego prze
     "ran": true,
     "currencies": {
       "usd": {
+        "reached": true,
         "currencyDisabled": false,
         "rateUnavailable": false,
         "rateStale": false,
+        "failed": false,
+        "plannedCreates": 3,
+        "plannedUpdates": 12,
         "created": 3,
         "updated": 12,
         "unchanged": 140,
         "skippedManualOverride": 5,
         "skippedNoPlnPrice": 0,
+        "skippedQuantityTiered": 0,
+        "stampFailed": 0,
         "rate": 3.9123,
         "rateEffectiveDate": "2026-08-12"
       }
-    }
+    },
+    "pricesWritten": 15
   },
   "liveRates": {
     "usd": { "mid": 3.9123, "effectiveDate": "2026-08-13", "tableNo": "154/A/NBP/2026" },
@@ -198,8 +205,11 @@ Wpis w `liveRates` jest albo kursem, albo obiektem `{ "error": ... }`, osobno i
 niezależnie dla każdej waluty. Błąd jednej nigdy nie wywraca całego żądania.
 
 `lastRunSummary` jest `null` do zakończenia pierwszego przebiegu. W jego wnętrzu
-waluta, której w przebiegu nie było, jest po prostu nieobecna w `currencies`,
-zamiast być obecna z samymi zerami.
+**każda** docelowa waluta jest obecna zawsze. Waluta, do której przebieg nie
+zdążył dojść, ma `reached: false`, a taka, której własny etap się wywrócił, ma
+`failed: true` i `error` - żadna nie znika z podsumowania. Wcześniejsza wersja po
+prostu pomijała walutę, do której nie doszła, co wyglądało dokładnie tak samo jak
+waluta przeliczona bez problemów.
 
 ### `POST /admin/fx-pricing/config`
 
@@ -234,21 +244,33 @@ zostaje zapisane.
 | --- | --- |
 | `ranAt` | Znacznik czasu przebiegu w formacie ISO |
 | `ran` | `false`, gdy przebieg nic nie zrobił, bo przełącznik był wyłączony |
-| `error` | Obecne, gdy przebieg się nie powiódł, na przykład przy braku marży |
+| `error` / `errorName` / `errorStack` | Obecne, gdy przebieg się nie powiódł. Komunikat jest prawdziwy, nigdy `"[object Object]"` |
+| `pricesWritten` | Ceny zapisane **i** oznaczone jako własne, łącznie we wszystkich walutach. `0` przy zakończonym przebiegu jest wprost pokazywane w panelu |
+| `currencies[kod].reached` | `false`, gdy przebieg skończył się, zanim doszedł do tej waluty |
+| `currencies[kod].failed` / `error` | Etap tej waluty się wywrócił. Kolejna waluta i tak została policzona |
 | `currencies[kod].currencyDisabled` | Waluty nie ma wśród obsługiwanych przez sklep |
 | `currencies[kod].rateUnavailable` | Kursu NBP nie udało się pobrać ani sparsować |
 | `currencies[kod].rateStale` | Najnowszy opublikowany kurs jest starszy niż tolerancja |
-| `currencies[kod].created` / `updated` / `unchanged` | Ceny utworzone, przesunięte i już poprawne |
+| `currencies[kod].plannedCreates` / `plannedUpdates` | Co przebieg postanowił zrobić, **zanim** cokolwiek zapisał |
+| `currencies[kod].created` / `updated` | Co naprawdę zostało zapisane **i** oznaczone jako własne |
+| `currencies[kod].unchanged` | Już równe celowi i wciąż prowadzone przez wtyczkę |
 | `currencies[kod].skippedManualOverride` | Zostawione w spokoju, zobacz [Ręczne nadpisania](./overrides.pl.mdx) |
-| `currencies[kod].skippedNoPlnPrice` | Zobacz uwagę niżej |
+| `currencies[kod].skippedNoPlnPrice` | Brak używalnej domyślnej ceny w PLN, z której dałoby się przeliczyć |
+| `currencies[kod].skippedQuantityTiered` | Wariant wyceniony progami ilościowymi, zobacz [Ręczne nadpisania](./overrides.pl.mdx) |
+| `currencies[kod].stampFailed` | Zapisane, ale nieodnotowane jako własne. Nigdy nie jest to normalne, zobacz niżej |
 | `currencies[kod].rate` / `rateEffectiveDate` | Kurs użyty w przebiegu, obecny zawsze, gdy udało się go pobrać |
 
-Jedno zastrzeżenie do `skippedNoPlnPrice`. Warianty, które w ogóle nie mają
-domyślnej ceny w PLN, są odfiltrowywane przed planowaniem, więc nigdy nie trafiają
-do tego licznika. W praktyce rośnie on tylko dla wariantu, który cenę w PLN *ma*,
-ale nie da się z niej policzyć sensownej kwoty docelowej, na przykład jest
-niedodatnia. Czytaj to jako „ceny PLN nie do użycia”, a nie „warianty bez ceny w
-PLN”.
+**`created` czytaj razem z `plannedCreates`, nie osobno.** To dwa pola, bo kiedyś
+było to jedno: przebieg raportował `created: 61`, choć nie zapisał ani jednej ceny
+- licznik brał się z planu, a zapisy, które po nim szły, się wywróciły.
+`plannedCreates` to zamiar, `created` to wynik, a różnica między nimi znaczy, że
+zapis albo oznaczenie nie doszło do skutku.
+
+**`stampFailed` nigdy nie jest normalne.** Cena, którą wtyczka zapisała, ale
+której nie zdołała oznaczyć jako swojej, od tego momentu - zgodnie z jej własną
+regułą własności - należy do kogoś innego: kolejny przebieg widzi cenę, o której
+nie ma śladu, że ją pisał, i pomija ją na stałe. Lekarstwem jest usunięcie takich
+cen, żeby następny przebieg utworzył je i oznaczył od nowa.
 
 ## Uruchamianie workflow bezpośrednio
 

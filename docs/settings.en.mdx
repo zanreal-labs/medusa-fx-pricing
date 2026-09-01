@@ -164,18 +164,25 @@ Returns the resolved configuration, the live rates, and the last run's summary.
     "ran": true,
     "currencies": {
       "usd": {
+        "reached": true,
         "currencyDisabled": false,
         "rateUnavailable": false,
         "rateStale": false,
+        "failed": false,
+        "plannedCreates": 3,
+        "plannedUpdates": 12,
         "created": 3,
         "updated": 12,
         "unchanged": 140,
         "skippedManualOverride": 5,
         "skippedNoPlnPrice": 0,
+        "skippedQuantityTiered": 0,
+        "stampFailed": 0,
         "rate": 3.9123,
         "rateEffectiveDate": "2026-08-12"
       }
-    }
+    },
+    "pricesWritten": 15
   },
   "liveRates": {
     "usd": { "mid": 3.9123, "effectiveDate": "2026-08-13", "tableNo": "154/A/NBP/2026" },
@@ -193,9 +200,11 @@ badge explaining that the environment is overriding it.
 A `liveRates` entry is either a rate or an `{ "error": ... }` object, per currency
 and independently. One currency failing never fails the request.
 
-`lastRunSummary` is `null` until the first run completes. Within it, a currency
-that was not part of the run is simply absent from `currencies` rather than
-present and zeroed.
+`lastRunSummary` is `null` until the first run completes. Within it, **every**
+target currency is present, always. A currency the run never got to carries
+`reached: false`, and one whose own pass threw carries `failed: true` and an
+`error`; neither is left out. An earlier version omitted a currency it never
+reached, which read exactly like a currency that had been fine.
 
 ### `POST /admin/fx-pricing/config`
 
@@ -229,20 +238,34 @@ run - when the plugin is off, both get `{ "ran": false }` and nothing is written
 | --- | --- |
 | `ranAt` | ISO timestamp of the run |
 | `ran` | `false` when the run did nothing because the toggle was off |
-| `error` | Present when the run failed, for example with no margin configured |
+| `error` / `errorName` / `errorStack` | Present when the run failed. The message is the real one, never `"[object Object]"` |
+| `pricesWritten` | Prices written **and** stamped across every currency. `0` on a completed run is called out in the admin |
+| `currencies[code].reached` | `false` when the run ended before this currency's turn |
+| `currencies[code].failed` / `error` | This currency's own pass threw. The next currency was still attempted |
 | `currencies[code].currencyDisabled` | Not in the store's supported currencies |
 | `currencies[code].rateUnavailable` | The NBP rate could not be fetched or parsed |
 | `currencies[code].rateStale` | The newest published rate is older than the tolerance |
-| `currencies[code].created` / `updated` / `unchanged` | Prices written, moved, and already correct |
+| `currencies[code].plannedCreates` / `plannedUpdates` | What the run decided to do, **before** it wrote anything |
+| `currencies[code].created` / `updated` | What actually landed **and** was stamped |
+| `currencies[code].unchanged` | Already at the target and still plugin-managed |
 | `currencies[code].skippedManualOverride` | Left alone, see [Manual overrides](./overrides.en.mdx) |
-| `currencies[code].skippedNoPlnPrice` | See the note below |
+| `currencies[code].skippedNoPlnPrice` | No usable default PLN price to convert from |
+| `currencies[code].skippedQuantityTiered` | Priced as a quantity ladder, see [Manual overrides](./overrides.en.mdx) |
+| `currencies[code].stampFailed` | Written but not recorded as plugin-owned. Never routine, see below |
 | `currencies[code].rate` / `rateEffectiveDate` | The rate the run used, present whenever one was fetched |
 
-One caveat on `skippedNoPlnPrice`. Variants with no default PLN price at all are
-filtered out before planning begins, so they are never counted. In practice this
-counter only reaches a non-zero value for a variant that *has* a PLN price which
-cannot produce a real target amount, such as a non-positive one. Read it as "PLN
-prices that were unusable", not as "variants without a PLN price".
+**Read `created` against `plannedCreates`, not on its own.** They are separate
+fields because they used to be the same one: a run reported `created: 61` while
+nothing at all had been written, because the counter was read off the plan and
+the writes that followed it failed. `plannedCreates` is the intent,
+`created` is the result, and a gap between them means a write or a stamp did not
+land.
+
+**`stampFailed` is never routine.** A price this plugin writes but cannot stamp
+is, by its own ownership rule, somebody else's price from that moment on - the
+next run sees a price it has no record of writing and skips it permanently. The
+remedy is to delete those prices so the next run can create and stamp them
+cleanly.
 
 ## Using the workflows directly
 
