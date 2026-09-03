@@ -5,10 +5,12 @@ description: "Wtyczka do Medusy v2, która przelicza ceny wariantów na USD i EU
 
 Sprzedajesz w złotówkach, a na wystawie mają stać jeszcze dolary i euro.
 `@zanreal/medusa-fx-pricing` bierze na siebie dokładnie tę jedną rzecz: czyta
-cenę PLN wariantu, przelicza ją po średnim kursie z tabeli A NBP, dokłada marżę,
-którą wybrałeś, i zapisuje wynik jako cenę tego wariantu w walucie docelowej.
-Robi to w chwili, w której cena w PLN się zmienia, i jeszcze raz każdej nocy, bo
-kurs rusza się także wtedy, gdy Twoje ceny stoją.
+cenę PLN wariantu, sprowadza ją do kwoty netto, jeśli ta cena jest zapisana jako
+brutto (domyślnie tak jest - zobacz [Ustawienia](./settings.pl.mdx)), przelicza ją
+po średnim kursie z tabeli A NBP, dokłada marżę, którą wybrałeś, i zapisuje wynik
+jako cenę tego wariantu w walucie docelowej. Robi to w chwili, w której cena w
+PLN się zmienia, i jeszcze raz każdej nocy, bo kurs rusza się także wtedy, gdy
+Twoje ceny stoją.
 
 ## Obietnica, od której wszystko się zaczyna
 
@@ -39,13 +41,18 @@ wolno dotykać.
 ## Wzór
 
 ```text
-foreign_amount = pln_amount / nbp_rate * margin_multiplier
+net_pln_amount = sourcePriceIncludesVat ? pln_amount / (1 + vatRate) : pln_amount
+foreign_amount = net_pln_amount / nbp_rate * margin_multiplier
 ```
 
 `nbp_rate` to liczba złotych za jedną jednostkę waluty obcej, bo tak zapisuje to
 NBP - dlatego dzielenie przeprowadza kwotę na walutę obcą po surowym kursie
 średnim. `margin_multiplier` dokłada do tego narzut: `1,25` to 25% na wierzchu,
-`1` oznacza „chcę goły kurs średni i nic więcej”.
+`1` oznacza „chcę goły kurs średni i nic więcej”. Krok VAT wykonuje się jako
+pierwszy i tylko wtedy, gdy `sourcePriceIncludesVat` jest `true` - domyślnie tak
+jest, zgodnie ze sklepem, dla którego powstała ta wtyczka, gdzie domyślna cena
+PLN jest brutto, a domyślne ceny EUR/USD są netto. Zobacz
+[Ustawienia](./settings.pl.mdx#vat-brutto-pln-netto-eurusd).
 
 Wynik jest zaokrąglany w górę przy połówce, do dwóch miejsc po przecinku. Jeżeli
 którykolwiek składnik nie pozwala policzyć sensownej ceny (kwota PLN równa zeru,
@@ -210,5 +217,7 @@ przestrzenią kluczy `fxPricing.*`.
   własności nie da się trzymać przy samej cenie, co zapisuje stempel i jakie cztery
   rozstrzygnięcia są możliwe.
 - **[Ustawienia i konfiguracja](./settings.pl.mdx)** - każda opcja, miejsca, w
-  których można ją nadpisać, dwie zmienne środowiskowe, strona w panelu i dwie
-  trasy API.
+  których można ją nadpisać, dwie zmienne środowiskowe, strona w panelu, dwie
+  trasy API oraz obsługa VAT/netto-brutto dla źródłowej ceny w PLN. Zawiera też
+  [suchy przebieg](./settings.pl.mdx#suchy-przebieg-dry-run) do odczytu, który
+  raportuje „bieżące PLN -> proponowane EUR/USD” bez zapisywania czegokolwiek.

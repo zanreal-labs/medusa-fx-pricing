@@ -29,6 +29,8 @@ the admin.
 | `enabled` | `boolean` | `false` | Seeds the persisted toggle, once, when the settings row is first created |
 | `marginMultiplier` | `number` | none | Fallback margin when no override is saved |
 | `stalenessToleranceHours` | `number` | `120` | Fallback staleness tolerance, in hours |
+| `sourcePriceIncludesVat` | `boolean` | `true` | Whether the PLN default price is gross and must be reduced to net before conversion |
+| `vatRate` | `number` | `0.23` | The VAT rate to strip when `sourcePriceIncludesVat` is `true`; ignored otherwise |
 
 ```ts title="medusa-config.ts"
 plugins: [
@@ -38,10 +40,15 @@ plugins: [
       enabled: false,
       marginMultiplier: 1.25,
       stalenessToleranceHours: 120,
+      sourcePriceIncludesVat: true,
+      vatRate: 0.23,
     },
   },
 ],
 ```
+
+Unlike `marginMultiplier` and `stalenessToleranceHours`, the last two are **not** overridable from
+the admin - see "VAT: gross PLN, net EUR/USD" below for why.
 
 ### The margin has no default, deliberately
 
@@ -64,6 +71,33 @@ tolerance for a public rate table's publication schedule, not a commercial
 preference. The unsafe direction is also already closed off, because setting it too
 low only skips a run - it can never price something off a rate you did not intend.
 See [Rates, and days without one](./rates.en.mdx).
+
+### VAT: gross PLN, net EUR/USD
+
+This plugin's origin store configures its default prices with **PLN gross (brutto,
+23% VAT)** and **EUR/USD net (netto)** - `price_preference.is_tax_inclusive` is
+`true` for `pln` and `false` for both `eur` and `usd`. Converting the PLN amount
+straight into a field the store itself declares net is wrong regardless of the
+margin: it puts a gross amount somewhere net is expected, so 23% VAT rides along
+uncorrected and inflates the effective markup - a configured `1.1` landed as an
+effective ~1.353 in production before this was caught (see AI-655).
+
+`sourcePriceIncludesVat` (default `true`) and `vatRate` (default `0.23`) are what
+control this:
+
+```text
+net_pln_amount = sourcePriceIncludesVat ? pln_amount / (1 + vatRate) : pln_amount
+foreign_amount = net_pln_amount / nbp_rate * margin_multiplier
+```
+
+**If your store's PLN default price is net instead of gross**, set
+`sourcePriceIncludesVat: false` in `medusa-config.ts` - `vatRate` is then ignored
+entirely and the raw PLN amount is converted exactly as it was before this option
+existed. This is a one-line, fully reversible flip that takes effect on the next
+backend restart, and needs no migration or database change. See
+`computeForeignAmount` and `toNetPlnAmount` in
+`src/modules/fx-pricing/lib/compute.ts`, and their tests, for the exact math and
+edge cases.
 
 ## Persisted settings
 
@@ -309,3 +343,37 @@ prices toward a target computed fresh from the current PLN price and the current
 rate, so the repair for a partial run is simply another run. A compensation that
 undid a partial recompute would leave prices further from the target than before
 the run started, not closer.
+
+## Dry run
+
+`previewFxPricingRecompute` is the read-only twin of `runFxPricingRecompute`: it
+runs the same catalogue read, the same live NBP rate fetch, and the same
+`planCurrencyRecompute` a real run would, but it never writes a price and never
+records a run summary or a managed-price stamp. It answers "what would change" -
+the current PLN price, the net base it would actually convert from (see "VAT:
+gross PLN, net EUR/USD" above), and the resulting EUR/USD amount - before anything
+is armed or run for real.
+
+A Medusa plugin cannot itself carry a `medusa exec` script - such a script belongs
+to the **host project's** `src/scripts/`. Add one there:
+
+```ts title="src/scripts/fx-pricing-preview.ts (host project)"
+import type { MedusaContainer } from "@medusajs/framework/types";
+import { formatFxPricingPreview, previewFxPricingRecompute } from "@zanreal/medusa-fx-pricing/workflows";
+
+export default async function fxPricingPreview({ container }: { container: MedusaContainer }) {
+  console.log(formatFxPricingPreview(await previewFxPricingRecompute(container)));
+}
+```
+
+```bash
+npx medusa exec ./src/scripts/fx-pricing-preview.js
+```
+
+This writes nothing and flips no toggle. The report lists, per currency, the live
+rate and whether it is stale, one line per variant this run would create or
+update (current PLN, the net base used, and the proposed amount), and the
+unchanged/manual-override/no-PLN-price/quantity-tiered counts for everything else.
+A host that wants a different output shape can call `previewFxPricingRecompute`
+directly and render the plain `FxPricingPreviewResult` itself instead of using
+`formatFxPricingPreview`.

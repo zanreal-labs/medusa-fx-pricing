@@ -244,10 +244,15 @@ export async function runFxPricingRecompute(
     // Refusing the whole run is the only honest option: a guessed markup
     // would be written straight onto customer-facing prices, and the operator
     // would have no way to tell it apart from a number they chose.
-    const { marginMultiplier } = runtimeOptions;
+    const { marginMultiplier, sourcePriceIncludesVat, vatRate } = runtimeOptions;
     if (marginMultiplier === null) {
       throw new MedusaError(MedusaError.Types.NOT_ALLOWED, MARGIN_NOT_CONFIGURED_MESSAGE);
     }
+    // See AI-655: the store's PLN default price is gross (brutto) while its
+    // EUR/USD default prices are net (netto), so the amount read below is
+    // reduced to its net base inside `computeForeignAmount` before the rate
+    // and margin are applied - see `VatAdjustment`.
+    const vatAdjustment = { sourceIncludesVat: sourcePriceIncludesVat, vatRate };
 
     // Asserted before the first currency rather than at the first write: a
     // pricing module that cannot write single prices is a refusal, not a
@@ -353,7 +358,7 @@ export async function runFxPricingRecompute(
           variant.managedRecord = record ? { amount: record.amount, priceId: record.price_id } : null;
         }
 
-        const plan = planCurrencyRecompute(candidates, rate.mid, marginMultiplier);
+        const plan = planCurrencyRecompute(candidates, rate.mid, marginMultiplier, vatAdjustment);
         currencySummary.plannedCreates = plan.created;
         currencySummary.plannedUpdates = plan.updated;
         currencySummary.unchanged = plan.unchanged;

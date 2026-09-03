@@ -1,4 +1,5 @@
 import { computeForeignAmount } from "../../modules/fx-pricing/lib/compute";
+import type { VatAdjustment } from "../../modules/fx-pricing/lib/compute";
 import { decidePriceAction } from "../../modules/fx-pricing/lib/decision";
 import type { ExistingDefaultPrice, ManagedPriceRecord } from "../../modules/fx-pricing/lib/decision";
 
@@ -72,11 +73,17 @@ function emptyPlan(): CurrencyPlan {
  * every decision is made from the plain data already gathered by the step.
  * See `decidePriceAction` for the manual-override rule this delegates to
  * per variant.
+ *
+ * `vatAdjustment` is optional and, when omitted, reproduces this function's
+ * pre-AI-655 behavior exactly (no VAT stripping, the raw PLN amount is
+ * converted as-is) - see `computeForeignAmount`/`toNetPlnAmount` for what it
+ * does when provided.
  */
 export function planCurrencyRecompute(
   variants: readonly VariantForPlanning[],
   nbpRate: number,
   marginMultiplier: number,
+  vatAdjustment?: VatAdjustment,
 ): CurrencyPlan {
   const plan = emptyPlan();
 
@@ -94,7 +101,7 @@ export function planCurrencyRecompute(
       continue;
     }
 
-    const targetAmount = computeForeignAmount(variant.plnAmount, nbpRate, marginMultiplier);
+    const targetAmount = computeForeignAmount(variant.plnAmount, nbpRate, marginMultiplier, vatAdjustment);
     if (targetAmount === undefined) {
       plan.skippedNoPlnPrice += 1;
       continue;

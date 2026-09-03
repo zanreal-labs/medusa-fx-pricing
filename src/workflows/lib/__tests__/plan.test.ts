@@ -139,4 +139,38 @@ describe("planCurrencyRecompute", () => {
     expect(plan.skippedNoPlnPrice).toBe(0);
     expect(plan.writes).toHaveLength(0);
   });
+
+  // AI-655: planCurrencyRecompute passes vatAdjustment straight through to
+  // computeForeignAmount - see that function's own tests for the VAT math
+  // itself. These just pin the pass-through and the backward-compatible
+  // no-op when it is omitted.
+  describe("VAT adjustment pass-through (AI-655)", () => {
+    it("is unaffected when no vatAdjustment is passed - the pre-AI-655 behavior", () => {
+      const plan = planCurrencyRecompute([variant({ plnAmount: 123 })], RATE, MARGIN);
+      expect(plan.writes).toEqual([
+        { productId: "prod_1", sourcePlnAmount: 123, targetAmount: 33.83, variantId: "variant_1" },
+      ]);
+    });
+
+    it("strips VAT from the PLN amount before computing the target when passed through", () => {
+      const plan = planCurrencyRecompute([variant({ plnAmount: 123 })], RATE, MARGIN, {
+        sourceIncludesVat: true,
+        vatRate: 0.23,
+      });
+      // 123 gross / 1.23 = 100 net; 100 / 4 * 1.1 = 27.5.
+      expect(plan.writes).toEqual([
+        { productId: "prod_1", sourcePlnAmount: 123, targetAmount: 27.5, variantId: "variant_1" },
+      ]);
+    });
+
+    it("records sourcePlnAmount as the raw (gross) PLN amount even when VAT was stripped for the target", () => {
+      const plan = planCurrencyRecompute([variant({ plnAmount: 123 })], RATE, MARGIN, {
+        sourceIncludesVat: true,
+        vatRate: 0.23,
+      });
+      // The audit trail keeps the actual source price, not the intermediate
+      // net base used only for the conversion.
+      expect(plan.writes[0]?.sourcePlnAmount).toBe(123);
+    });
+  });
 });

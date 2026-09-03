@@ -208,8 +208,10 @@ class FxPricingModuleService extends MedusaService({
       forceDisabled,
       marginMultiplier: settings.margin_multiplier ?? this.moduleOptions_.marginMultiplier,
       persistedEnabled: settings.enabled,
+      sourcePriceIncludesVat: this.moduleOptions_.sourcePriceIncludesVat,
       stalenessToleranceHours:
         settings.staleness_tolerance_hours ?? this.moduleOptions_.stalenessToleranceHours,
+      vatRate: this.moduleOptions_.vatRate,
     };
   }
 
