@@ -41,6 +41,30 @@ export interface FxPricingModuleOptions {
    * broken publication.
    */
   stalenessToleranceHours?: number;
+  /**
+   * Whether the store's default PLN price includes VAT ("brutto") and must be
+   * reduced to its net ("netto") base before the FX conversion - see AI-655.
+   *
+   * Defaults to `true` because that is what production actually has:
+   * `price_preference` for the `pln` currency is `is_tax_inclusive: true`,
+   * while both `eur` and `usd` are `false` (netto). Converting a gross PLN
+   * amount straight into a field declared net silently inflates the markup -
+   * a configured `1.1` landed as an effective ~1.353 in production, because
+   * 23% VAT rode along uncorrected. See `computeForeignAmount` and
+   * `VatAdjustment` in `lib/compute.ts`.
+   *
+   * Set this to `false` only if the store's PLN default price is ever
+   * changed to netto - `vatRate` is then ignored and the raw PLN amount is
+   * used exactly as it was before this option existed.
+   */
+  sourcePriceIncludesVat?: boolean;
+  /**
+   * The VAT rate to strip from the PLN source amount before converting, when
+   * `sourcePriceIncludesVat` is `true`. Defaults to `0.23` (Poland's standard
+   * rate, matching the store's actual `pln` `price_preference`). Ignored
+   * entirely when `sourcePriceIncludesVat` is `false`.
+   */
+  vatRate?: number;
 }
 
 export interface ResolvedFxPricingModuleOptions {
@@ -48,6 +72,10 @@ export interface ResolvedFxPricingModuleOptions {
   /** `null` when no margin was configured - see `FxPricingModuleOptions.marginMultiplier`. */
   marginMultiplier: number | null;
   stalenessToleranceHours: number;
+  /** See `FxPricingModuleOptions.sourcePriceIncludesVat`. */
+  sourcePriceIncludesVat: boolean;
+  /** See `FxPricingModuleOptions.vatRate`. */
+  vatRate: number;
 }
 
 /**
@@ -60,13 +88,26 @@ export interface ResolvedFxPricingModuleOptions {
  */
 export const DEFAULT_STALENESS_TOLERANCE_HOURS = 120;
 
+/**
+ * Whether the PLN source price is treated as gross (brutto) by default - see
+ * `FxPricingModuleOptions.sourcePriceIncludesVat`. `true` because that is
+ * what production's `pln` `price_preference` actually is
+ * (`is_tax_inclusive: true`), confirmed on AI-655.
+ */
+export const DEFAULT_SOURCE_PRICE_INCLUDES_VAT = true;
+
+/** Poland's standard VAT rate - see `FxPricingModuleOptions.vatRate`. */
+export const DEFAULT_VAT_RATE = 0.23;
+
 export function resolveModuleOptions(
   options?: FxPricingModuleOptions,
 ): ResolvedFxPricingModuleOptions {
   return {
     enabled: options?.enabled ?? false,
     marginMultiplier: options?.marginMultiplier ?? null,
+    sourcePriceIncludesVat: options?.sourcePriceIncludesVat ?? DEFAULT_SOURCE_PRICE_INCLUDES_VAT,
     stalenessToleranceHours: options?.stalenessToleranceHours ?? DEFAULT_STALENESS_TOLERANCE_HOURS,
+    vatRate: options?.vatRate ?? DEFAULT_VAT_RATE,
   };
 }
 
@@ -105,6 +146,16 @@ export interface ResolvedRuntimeOptions {
    */
   marginMultiplier: number | null;
   stalenessToleranceHours: number;
+  /**
+   * See `FxPricingModuleOptions.sourcePriceIncludesVat`. Not persisted/
+   * overridable through Settings > FX pricing (unlike margin and staleness
+   * tolerance) - it describes a fact about how the store's PLN price is
+   * configured, not a per-run commercial choice, so it is resolved straight
+   * from `medusa-config.ts` on every read, the same as `enabled`'s seed value.
+   */
+  sourcePriceIncludesVat: boolean;
+  /** See `FxPricingModuleOptions.vatRate`. Same non-persisted resolution as `sourcePriceIncludesVat`. */
+  vatRate: number;
 }
 
 /**

@@ -30,6 +30,8 @@ się w całości z panelu.
 | `enabled` | `boolean` | `false` | Zasiewa przełącznik w bazie, jednorazowo, przy tworzeniu wiersza ustawień |
 | `marginMultiplier` | `number` | brak | Marża zapasowa, gdy nie zapisano nadpisania |
 | `stalenessToleranceHours` | `number` | `120` | Zapasowa tolerancja nieaktualności, w godzinach |
+| `sourcePriceIncludesVat` | `boolean` | `true` | Czy domyślna cena PLN jest brutto i musi zostać sprowadzona do netto przed przeliczeniem |
+| `vatRate` | `number` | `0.23` | Stawka VAT do odjęcia, gdy `sourcePriceIncludesVat` jest `true`; w przeciwnym razie ignorowana |
 
 ```ts title="medusa-config.ts"
 plugins: [
@@ -39,10 +41,16 @@ plugins: [
       enabled: false,
       marginMultiplier: 1.25,
       stalenessToleranceHours: 120,
+      sourcePriceIncludesVat: true,
+      vatRate: 0.23,
     },
   },
 ],
 ```
+
+W odróżnieniu od `marginMultiplier` i `stalenessToleranceHours`, tych dwóch **nie
+da się** nadpisać z panelu - zobacz "VAT: brutto PLN, netto EUR/USD" poniżej,
+dlaczego.
 
 ### Marża celowo nie ma wartości domyślnej
 
@@ -65,6 +73,33 @@ tolerancja dla harmonogramu publikacji publicznej tabeli kursów, a nie preferen
 handlowa. Niebezpieczny kierunek jest tu zresztą z góry zamknięty, bo ustawienie
 zbyt niskiej wartości powoduje najwyżej pominięcie przebiegu, a nigdy wyceny po
 kursie, którego nie chciałeś. Zobacz [Kursy i dni bez kursu](./rates.pl.mdx).
+
+### VAT: brutto PLN, netto EUR/USD
+
+Sklep, dla którego powstała ta wtyczka, ma domyślne ceny skonfigurowane jako
+**PLN brutto (23% VAT)** i **EUR/USD netto** - `price_preference.is_tax_inclusive`
+to `true` dla `pln` i `false` zarówno dla `eur`, jak i `usd`. Wstawienie kwoty PLN
+wprost do pola, które sklep sam deklaruje jako netto, jest błędem niezależnie od
+marży: wkłada kwotę brutto tam, gdzie oczekiwane jest netto, więc 23% VAT jedzie
+dalej nieskorygowane i zawyża efektywny narzut - skonfigurowane `1.1` dało na
+produkcji efektywnie ~1,353, zanim to wyłapano (zobacz AI-655).
+
+Kontrolują to `sourcePriceIncludesVat` (domyślnie `true`) i `vatRate` (domyślnie
+`0.23`):
+
+```text
+net_pln_amount = sourcePriceIncludesVat ? pln_amount / (1 + vatRate) : pln_amount
+foreign_amount = net_pln_amount / nbp_rate * margin_multiplier
+```
+
+**Jeśli domyślna cena PLN w Twoim sklepie jest netto, a nie brutto**, ustaw
+`sourcePriceIncludesVat: false` w `medusa-config.ts` - `vatRate` jest wtedy
+całkowicie ignorowane, a surowa kwota PLN jest przeliczana dokładnie tak, jak
+przed pojawieniem się tej opcji. To jednolinijkowa, w pełni odwracalna zmiana,
+która zaczyna działać po najbliższym restarcie backendu i nie wymaga migracji ani
+zmiany w bazie danych. Dokładną matematykę i przypadki brzegowe zobacz w
+`computeForeignAmount` i `toNetPlnAmount` w
+`src/modules/fx-pricing/lib/compute.ts` oraz w ich testach.
 
 ## Ustawienia w bazie
 
@@ -314,3 +349,38 @@ stronę celu policzonego na świeżo z bieżącej ceny w PLN i bieżącego kursu
 naprawą po przerwanym przebiegu jest po prostu kolejny przebieg. Kompensacja
 cofająca połowiczne przeliczenie zostawiłaby ceny dalej od celu niż przed startem,
 a nie bliżej.
+
+## Suchy przebieg (dry run)
+
+`previewFxPricingRecompute` to bliźniak `runFxPricingRecompute` działający
+wyłącznie do odczytu: wykonuje to samo odczytanie katalogu, to samo pobranie
+żywego kursu NBP i to samo `planCurrencyRecompute`, co prawdziwy przebieg, ale
+nigdy nie zapisuje ceny i nigdy nie zapisuje podsumowania przebiegu ani stempla
+zarządzanej ceny. Odpowiada na pytanie "co by się zmieniło" - bieżąca cena PLN,
+baza netto, z której faktycznie policzono by przeliczenie (zobacz "VAT: brutto
+PLN, netto EUR/USD" wyżej), i wynikowa kwota EUR/USD - zanim cokolwiek zostanie
+uzbrojone albo uruchomione naprawdę.
+
+Wtyczka Medusa nie może sama nosić skryptu `medusa exec` - taki skrypt należy do
+`src/scripts/` **projektu gospodarza**. Dodaj tam jeden:
+
+```ts title="src/scripts/fx-pricing-preview.ts (projekt gospodarza)"
+import type { MedusaContainer } from "@medusajs/framework/types";
+import { formatFxPricingPreview, previewFxPricingRecompute } from "@zanreal/medusa-fx-pricing/workflows";
+
+export default async function fxPricingPreview({ container }: { container: MedusaContainer }) {
+  console.log(formatFxPricingPreview(await previewFxPricingRecompute(container)));
+}
+```
+
+```bash
+npx medusa exec ./src/scripts/fx-pricing-preview.js
+```
+
+Nic to nie zapisuje i nie przełącza żadnego ustawienia. Raport wymienia, dla
+każdej waluty: żywy kurs i to, czy jest nieaktualny, po jednej linii na wariant,
+który ten przebieg by utworzył albo zaktualizował (bieżące PLN, użytą bazę netto i
+proponowaną kwotę), oraz liczniki unchanged/manualOverride/noPlnPrice/
+quantityTiered dla wszystkiego innego. Gospodarz, który chce innego formatu
+wyjścia, może wywołać `previewFxPricingRecompute` bezpośrednio i samodzielnie
+wyrenderować surowy `FxPricingPreviewResult`, zamiast `formatFxPricingPreview`.

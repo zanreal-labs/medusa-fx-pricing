@@ -6,11 +6,13 @@ description: A Medusa v2 plugin that derives USD and EUR variant prices from a s
 `@zanreal/medusa-fx-pricing` answers one question, for every variant in your
 catalogue: given what this costs in PLN, what should it say in USD and in EUR?
 
-It takes the variant's own default PLN price, divides by the NBP (Narodowy Bank
-Polski, the Polish central bank) table A mid rate, multiplies by a margin you
-choose, and writes the result as that variant's default price in the target
-currency. It does that the moment the PLN price changes, and again every night,
-because the rate moves even when your prices do not.
+It takes the variant's own default PLN price, reduces it to a net base if that
+price is stored gross (the default - see [Settings and configuration](./settings.en.mdx)),
+divides by the NBP (Narodowy Bank Polski, the Polish central bank) table A mid
+rate, multiplies by a margin you choose, and writes the result as that variant's
+default price in the target currency. It does that the moment the PLN price
+changes, and again every night, because the rate moves even when your prices do
+not.
 
 ## The gap it fills
 
@@ -31,13 +33,17 @@ prices it is allowed to touch.
 ## The formula
 
 ```text
-foreign_amount = pln_amount / nbp_rate * margin_multiplier
+net_pln_amount = sourcePriceIncludesVat ? pln_amount / (1 + vatRate) : pln_amount
+foreign_amount = net_pln_amount / nbp_rate * margin_multiplier
 ```
 
 `nbp_rate` is PLN per one unit of the foreign currency, which is NBP's own
 convention, so dividing converts into that currency at the raw market mid rate.
 `margin_multiplier` then grosses it up: `1.25` puts 25% on top, `1` means you want
-the bare mid rate and nothing else.
+the bare mid rate and nothing else. The VAT step runs first, and only when
+`sourcePriceIncludesVat` is `true` - the default, matching this plugin's origin
+store, where the PLN default price is gross and EUR/USD default prices are net.
+See [Settings and configuration](./settings.en.mdx#vat-gross-pln-net-eurusd).
 
 The result is rounded half-up to two decimal places. If any input cannot produce a
 real price - a PLN amount of zero, a non-positive rate, a non-positive margin -
@@ -207,5 +213,7 @@ under the `fxPricing.*` key namespace.
   ownership marker cannot live on the price row, what the stamp records, and the
   four branches the decision takes.
 - **[Settings and configuration](./settings.en.mdx)** - every option, where each
-  one can be overridden, the two environment variables, the admin page, and the
-  two admin API routes.
+  one can be overridden, the two environment variables, the admin page, the two
+  admin API routes, and the VAT/net-vs-gross handling for the PLN source price.
+  Also covers the read-only [dry run](./settings.en.mdx#dry-run) that reports
+  "current PLN -> proposed EUR/USD" without writing anything.
