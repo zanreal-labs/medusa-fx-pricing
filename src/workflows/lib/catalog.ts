@@ -56,11 +56,33 @@ function toPrices(raw: unknown): RawPrice[] {
 }
 
 /**
+ * One page of `product_variant` rows, as `CatalogVariant`s. A row with no
+ * `product_id` is dropped rather than defaulted: the planner keys its writes by
+ * product as well as variant, and a variant that cannot say which product it
+ * belongs to is not something to guess about.
+ */
+function toCatalogVariants(rows: readonly Record<string, unknown>[]): CatalogVariant[] {
+  const variants: CatalogVariant[] = [];
+  for (const row of rows) {
+    const productId = row.product_id as string | null;
+    if (!productId) {
+      continue;
+    }
+    variants.push({
+      id: row.id as string,
+      prices: toPrices(row.prices),
+      productId,
+    });
+  }
+  return variants;
+}
+
+/**
  * Every product variant in the store, with its full price list.
  *
  * A full-catalog scan, same as the sibling `medusa-allegro` plugin's own
- * hourly pass (`listEligibleVariants`) - acceptable for a job that runs once
- * a day. `query.graph` on `product_variant` resolves `prices.*` through
+ * hourly pass (`listEligibleVariants`) - acceptable for the daily backstop
+ * job. `query.graph` on `product_variant` resolves `prices.*` through
  * Medusa's built-in Product<->Pricing link, the same link the admin product
  * edit page's price grid reads.
  */
@@ -75,17 +97,7 @@ export async function listCatalogVariants(container: MedusaContainer): Promise<C
       pagination: { skip: page * PAGE_SIZE, take: PAGE_SIZE },
     });
 
-    for (const row of data) {
-      const productId = row.product_id as string | null;
-      if (!productId) {
-        continue;
-      }
-      variants.push({
-        id: row.id as string,
-        prices: toPrices(row.prices),
-        productId,
-      });
-    }
+    variants.push(...toCatalogVariants(data));
 
     if (data.length < PAGE_SIZE) {
       break;
@@ -93,6 +105,149 @@ export async function listCatalogVariants(container: MedusaContainer): Promise<C
   }
 
   return variants;
+}
+
+/**
+ * The same read as `listCatalogVariants`, narrowed to specific variant ids -
+ * what the event-driven recompute passes through, so one product save costs a
+ * filtered query instead of a scan of the whole catalog.
+ *
+ * An id that no longer resolves (a variant deleted between the event being
+ * emitted and this read) is simply absent from the result rather than an
+ * error. An event says what changed; it does not promise the row is still
+ * there when the handler gets to it.
+ */
+export async function listCatalogVariantsByIds(
+  container: MedusaContainer,
+  variantIds: readonly string[],
+): Promise<CatalogVariant[]> {
+  const variants: CatalogVariant[] = [];
+  if (variantIds.length === 0) {
+    return variants;
+  }
+  const query = container.resolve<QueryGraph>(ContainerRegistrationKeys.QUERY);
+
+  for (let offset = 0; offset < variantIds.length; offset += PAGE_SIZE) {
+    const chunk = variantIds.slice(offset, offset + PAGE_SIZE);
+    const { data } = await query.graph({
+      entity: "product_variant",
+      fields: VARIANT_PRICE_FIELDS,
+      filters: { id: chunk },
+    });
+    variants.push(...toCatalogVariants(data));
+  }
+
+  return variants;
+}
+
+/**
+ * Every variant id belonging to the given products.
+ *
+ * Needed because `product.created` and `product.updated` name a PRODUCT, and
+ * that is all they name. `createProductsWorkflow` emits `product.created` and
+ * no per-variant event at all, and `updateProductsWorkflow` writes variant
+ * prices (it runs `upsertVariantPricesWorkflow` as a step) while emitting only
+ * `product.updated` - so without expanding the product id here, a product
+ * created with its prices, and a `PUT /admin/products/:id` that changes them,
+ * would both go unnoticed until the next daily run.
+ */
+export async function listVariantIdsByProductIds(
+  container: MedusaContainer,
+  productIds: readonly string[],
+): Promise<string[]> {
+  const variantIds = new Set<string>();
+  if (productIds.length === 0) {
+    return [];
+  }
+  const query = container.resolve<QueryGraph>(ContainerRegistrationKeys.QUERY);
+
+  for (let offset = 0; offset < productIds.length; offset += PAGE_SIZE) {
+    const chunk = productIds.slice(offset, offset + PAGE_SIZE);
+    const { data } = await query.graph({
+      entity: "product_variant",
+      fields: ["id"],
+      filters: { product_id: chunk },
+    });
+    for (const row of data) {
+      const id = row.id as string | null;
+      if (id) {
+        variantIds.add(id);
+      }
+    }
+  }
+
+  return [...variantIds];
+}
+
+/**
+ * The variants behind a set of `price` ids, keeping only the prices that are in
+ * `currencyCode`.
+ *
+ * The currency filter is this plugin's recursion guard and the whole reason
+ * this read exists. `pricing.price.created` / `pricing.price.updated` fire for
+ * every price row the pricing module writes - including the USD and EUR rows
+ * this plugin writes itself, through `addPrices`/`updatePrices`, both of which
+ * are `@EmitEvents()`-decorated. A subscriber acting on those unfiltered would
+ * re-enter the recompute it had just finished. Narrowing to the native PLN
+ * price means the only price events that reach a recompute are changes to the
+ * SOURCE it derives from; its own output is dropped one query in, before
+ * anything is planned or written.
+ *
+ * A price is joined to its variant the same way `fetchPriceSetIdsByVariantIds`
+ * joins them, through `product_variant_price_set` - just read in the other
+ * direction.
+ */
+export async function listVariantIdsByPriceIds(
+  container: MedusaContainer,
+  priceIds: readonly string[],
+  currencyCode: string,
+): Promise<string[]> {
+  if (priceIds.length === 0) {
+    return [];
+  }
+  const query = container.resolve<QueryGraph>(ContainerRegistrationKeys.QUERY);
+  const normalized = currencyCode.trim().toLowerCase();
+  const priceSetIds = new Set<string>();
+
+  for (let offset = 0; offset < priceIds.length; offset += PAGE_SIZE) {
+    const chunk = priceIds.slice(offset, offset + PAGE_SIZE);
+    const { data } = await query.graph({
+      entity: "price",
+      fields: ["id", "currency_code", "price_set_id"],
+      filters: { id: chunk },
+    });
+    for (const row of data) {
+      const rowCurrency = typeof row.currency_code === "string" ? row.currency_code : "";
+      const priceSetId = row.price_set_id as string | null;
+      if (priceSetId && rowCurrency.trim().toLowerCase() === normalized) {
+        priceSetIds.add(priceSetId);
+      }
+    }
+  }
+
+  if (priceSetIds.size === 0) {
+    return [];
+  }
+
+  const priceSetIdList = [...priceSetIds];
+  const variantIds = new Set<string>();
+
+  for (let offset = 0; offset < priceSetIdList.length; offset += PAGE_SIZE) {
+    const chunk = priceSetIdList.slice(offset, offset + PAGE_SIZE);
+    const { data } = await query.graph({
+      entity: "product_variant_price_set",
+      fields: ["variant_id", "price_set_id"],
+      filters: { price_set_id: chunk },
+    });
+    for (const row of data) {
+      const variantId = row.variant_id as string | null;
+      if (variantId) {
+        variantIds.add(variantId);
+      }
+    }
+  }
+
+  return [...variantIds];
 }
 
 /**

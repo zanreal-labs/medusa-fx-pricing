@@ -1,7 +1,7 @@
 {
   "name": "@zanreal/medusa-fx-pricing",
   "version": "0.1.0",
-  "description": "Medusa v2 plugin that derives USD/EUR variant prices from a native PLN selling price using the NBP (Polish central bank) table A mid rate, on a daily schedule, with a configurable margin and manual-override protection.",
+  "description": "Medusa v2 plugin that derives USD/EUR variant prices from a native PLN selling price using the NBP (Polish central bank) table A mid rate, as soon as that price changes and again daily, with a configurable margin and manual-override protection.",
   "keywords": [
     "medusa-plugin",
     "medusa-v2"

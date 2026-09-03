@@ -2,8 +2,8 @@
 
 A [Medusa v2](https://medusajs.com) plugin that derives USD and EUR variant prices from a store's
 native PLN selling price, using the NBP (Narodowy Bank Polski, the Polish central bank) table A
-mid rate plus a configurable margin. Runs on a daily schedule; a manual price edit is never
-overwritten.
+mid rate plus a configurable margin. Reprices within seconds of a PLN price changing, with a daily
+job as the backstop; a manual price edit is never overwritten.
 
 Full documentation, in English and Polish, is published at
 <https://zanreal.com/docs/oss/medusa-fx-pricing> and authored in [`docs/`](./docs).
@@ -12,7 +12,8 @@ There is no FX-pricing plugin in the Medusa ecosystem today. A store that sells 
 USD/EUR listed too either prices them by hand (and lets them drift out of date as the rate moves)
 or wires up a bespoke script. This plugin is that script, packaged: a small, standalone module that
 computes `foreign_amount = pln_amount / nbp_rate * margin_multiplier` for every variant with a PLN
-price, once a day, and gets out of the way of anything a human has already priced by hand.
+price - as soon as that PLN price changes, and again every night as the rate moves - and gets out of
+the way of anything a human has already priced by hand.
 
 ## What it does
 
@@ -23,7 +24,12 @@ price, once a day, and gets out of the way of anything a human has already price
 - Computes `foreign_amount = pln_amount / nbp_rate * margin_multiplier` for every product variant
   that has a default (no price-list, no price-rule) PLN price, and writes it as that variant's
   default USD/EUR price.
-- Runs once a day via a Medusa scheduled job, and on demand via a "Recompute now" admin action.
+- Recomputes the affected variants **as soon as their PLN price changes**, via a subscriber on the
+  product, variant and price events - so a new product, or a corrected price, has its USD/EUR
+  prices within seconds rather than at 03:00 tomorrow. See "Reacting to a price change" below.
+- Runs a **full pass once a day** as the backstop for everything an event cannot say (the rate
+  moved, a price was written outside the workflows, an event was dropped), and on demand via a
+  "Recompute now" admin action.
 - **Never touches a price a human has set.** The moment a USD/EUR price is created or edited by
   anything other than this plugin, it is permanently left alone - see "How manual overrides stay
   sacred" below for the exact mechanism.
@@ -113,6 +119,77 @@ for a variant that already has a price set with `Cannot create multiple links be
 the incoming array, so handing it one USD price would delete the variant's PLN price. The sibling
 `srp-store-price` script in `zanreal-labs/medusa` reached the same two primitives for the same
 reason; see `src/workflows/lib/price-writes.ts` for the full write-up.
+
+## Reacting to a price change
+
+`src/subscribers/fx-pricing-price-change-recompute.ts` recomputes the affected variants - and only
+those - as soon as their PLN price moves. The daily job is the backstop, not the mechanism.
+
+### The events, and why each one
+
+Measured against the Medusa 2.18.0 packages this plugin pins, because the answer is not visible by
+grepping for a string:
+
+| Event | Where it comes from | Why it is needed |
+| --- | --- | --- |
+| `product.created` | `emitEventStep` in `createProductsWorkflow` | A product is created with its variants and prices in one call, and **no variant event is emitted at all**. Without this line, a new product has no USD/EUR price until the next daily run - the exact gap this subscriber exists to close. |
+| `product.updated` | `emitEventStep` in `updateProductsWorkflow` | That workflow runs `upsertVariantPricesWorkflow` as a step - it *writes variant prices* - while emitting only the product event. A `PUT /admin/products/:id` carrying new prices is invisible without this line. |
+| `product-variant.created` | `createProductVariantsWorkflow` | A variant added to an existing product. |
+| `product-variant.updated` | `updateProductVariantsWorkflow` | The admin's variant editor and the `POST /admin/products/:id/variants/batch` bulk price edit both end here (`batchProductVariantsWorkflow` runs those workflows as steps). |
+| `pricing.price.created` / `pricing.price.updated` | Not a constant anywhere: `MedusaService`'s `interceptEntityMutationEvents` builds the name at runtime from the ORM's `afterCreate`/`afterUpdate` on the `Price` model plus the pricing module's service name | The path no product event covers: `pricing.addPrices` / `updatePrices` / `updatePriceSets` called directly by a script, a backfill or another plugin. |
+
+`pricing.price.deleted` is deliberately **not** subscribed to. It carries the id of a row that no
+longer exists, so its currency cannot be read - and the currency is the whole recursion guard (see
+below). What that leaves uncovered is the reclaim path: deleting a manually-overridden USD price to
+hand it back to this plugin is picked up by the daily job rather than immediately. `product.deleted`
+and `product-variant.deleted` are absent for the plain reason that there is nothing left to reprice.
+
+### Why this does not loop
+
+A recompute writes USD and EUR prices through `addPrices`/`updatePrices`, and both of those are
+`@EmitEvents()`-decorated - so every write this plugin makes emits a `pricing.price.*` event that
+this same subscriber is listening for. Two independent things stop that becoming an event loop, and
+the first is the one relied on:
+
+1. **A price event is resolved through its currency.** `listVariantIdsByPriceIds` reads each price
+   id back and keeps only the rows whose `currency_code` is `pln`. This plugin only ever writes USD
+   and EUR, so its own output resolves to zero variants and the handler returns before anything is
+   queued. The `product.*` and `product-variant.*` events need no such guard: those are emitted by
+   core's product workflows, and this plugin never calls one - it writes through the pricing module
+   directly, for the reasons in "How a price is actually written".
+2. **A second pass would have nothing to write anyway.** Even if a loop did start, the second lap
+   over the same variant finds the price already at the target amount and still carrying this
+   plugin's stamp, so `decidePriceAction` answers `noop`, nothing is written, and no further event
+   is emitted. The loop is convergent, not merely guarded.
+
+### Bursts
+
+Saving a nine-variant product emits nine variant events plus a product event plus a price event per
+row, and a CSV import emits thousands - each of which, handled alone, would fetch the NBP rate for
+USD and again for EUR. So ids are collected into an in-process queue and the recompute runs once per
+burst: 2s after the last event, or 30s after the first, whichever comes sooner. Firing after the
+*last* write also means the recompute reads the finished state of a multi-step save rather than a
+half-written one.
+
+The queue is in-process rather than lock-and-cache coordinated across workers, because the work is
+already partitioned by variant id: two workers each holding half a burst produce two runs over
+disjoint variant sets, which is the correct answer reached in two passes. The cost is that ids held
+in the queue are lost if the process exits before the flush - which is one more thing the daily job
+is the backstop for. See `src/subscribers/lib/recompute-queue.ts`.
+
+### What it does not do
+
+- **It does not persist a run summary.** `last_run_summary` is a single column that Settings > FX
+  pricing renders as "the last run"; letting a two-variant event-driven run overwrite it would
+  replace the catalog-wide picture with counters that are true of two variants and nothing else,
+  dozens of times a day. Only the full pass persists. An event-driven run reports itself in the log
+  instead: `recomputed N variant(s) after a PLN price change: M price(s) written`.
+- **It does not run while the plugin is off.** The toggle is checked before any query, so a store
+  that has never armed the plugin pays one indexed single-row read per product save and stops.
+- **It does not change any rule.** Narrowing a run changes only *which* variants are read. The
+  margin refusal, the per-currency skips, the manual-override decision and the stamping are the same
+  code, because there is exactly one implementation of them - `runFxPricingRecompute`, called with
+  `{ variantIds }`.
 
 ## Install
 
@@ -267,9 +344,15 @@ because this plugin has nothing per-product to show that is not already the vari
   thrown, including nested `{ action, error }` wrappers, and falls back to JSON rather than to
   nothing.
 - **A run that writes nothing says so.** `pricesWritten` is the total across every currency, and a
-  completed run that leaves it at `0` logs a warning with the counts that explain why and shows a
-  line in the admin. A plugin that decides to touch nothing and reports nothing is
-  indistinguishable from one that works.
+  completed *full* run that leaves it at `0` logs a warning with the counts that explain why and
+  shows a line in the admin. A plugin that decides to touch nothing and reports nothing is
+  indistinguishable from one that works. (A narrowed, event-driven run that writes nothing is the
+  ordinary outcome of saving a product whose PLN price did not move, so that one logs at `debug` -
+  warning on each of those would train an operator to ignore the warning that matters.)
+- **A run says what set it going, and how wide it was.** `trigger` is one of `scheduled`, `manual`,
+  `event` or `workflow`, and `scopedVariantCount` is the number of variants the run was narrowed to
+  or `null` for a full pass. Without those two, `skippedNoPlnPrice: 0` reads as a statement about
+  the catalogue when it may be a statement about two variants.
 
 ## Admin API
 
@@ -340,21 +423,39 @@ uses - when the plugin is disabled, this returns `{ "summary": { "ran": false, .
 writing anything, rather than duplicating (and risking disagreeing with) the job's own gate.
 
 ```json
-{ "summary": { "ranAt": "...", "ran": true, "currencies": { "usd": { "...": "..." }, "eur": { "...": "..." } } } }
+{ "summary": { "ranAt": "...", "ran": true, "trigger": "manual", "scopedVariantCount": null, "currencies": { "usd": { "...": "..." }, "eur": { "...": "..." } } } }
 ```
 
-## The scheduled job
+## The scheduled job (the backstop)
 
-`fx-pricing-daily-recompute` (`src/jobs/fx-pricing-daily-recompute.ts`) runs once a day at 03:00
-server time by default - after the NBP table A publication window has closed for the previous day
-and before most stores' business hours, so a price change is never visible mid-shopping-session.
-Override the schedule with `FX_PRICING_CRON` (a standard cron expression) - Medusa evaluates a
-scheduled job's `config.schedule` at plugin-load time, before the DI container (and this plugin's
-resolved options) exists, so the schedule has to be read from the environment rather than from a
-plugin option or the persisted settings.
+`fx-pricing-daily-recompute` (`src/jobs/fx-pricing-daily-recompute.ts`) runs a full catalog pass
+once a day at 03:00 server time by default - after the NBP table A publication window has closed for
+the previous day and before most stores' business hours, so a price change is never visible
+mid-shopping-session. Override the schedule with `FX_PRICING_CRON` (a standard cron expression) -
+Medusa evaluates a scheduled job's `config.schedule` at plugin-load time, before the DI container
+(and this plugin's resolved options) exists, so the schedule has to be read from the environment
+rather than from a plugin option or the persisted settings.
+
+Since the subscriber handles a PLN price changing, this job exists for everything an event cannot
+say, and the list is real:
+
+- **The rate moved, not the price.** NBP publishes a new table A every business day and no store
+  event accompanies it. Nothing but a schedule notices that yesterday's USD price is now a day of
+  currency drift out of date - which is the entire point of this plugin.
+- **A price written outside a workflow.** Raw SQL or a migration changes what customers are quoted
+  and emits nothing at all.
+- **An event that was dropped.** A restart mid-burst, an event bus that lost a message, a handler
+  that threw. Every event-driven system needs a pass that assumes it missed something.
+- **A price handed back.** Deleting a manually-overridden USD price makes the variant eligible
+  again, but the deletion itself is not a trigger this plugin acts on - see "Reacting to a price
+  change".
+
+It is also the only caller that scans the whole catalog and the only one whose summary is persisted
+as `last_run_summary`.
 
 When the plugin is disabled (the common case for a fresh install - `enabled` defaults to `false`),
-the job logs `skipped (disabled...)` and returns immediately, writing nothing.
+the job logs `skipped (disabled...)` and returns immediately, writing nothing - and so does the
+subscriber.
 
 ## Handling a currency that is not enabled yet
 
@@ -398,13 +499,20 @@ The pure business logic has exhaustive unit tests and no framework dependency:
   whole batch of variants and tallies the result, still with no I/O.
 - `src/workflows/lib/variant-prices.ts` - reading a variant's default price out of its raw price
   list (`findDefaultPrice`, `hasQuantityTieredPrice`).
+- `src/subscribers/lib/events.ts` - which events are subscribed to and how the ids are read out of
+  one (`parseFxPricingEvent`), including that the match is exact rather than by prefix and that the
+  three payload shapes Medusa can hand a subscriber are all accepted.
+- `src/subscribers/lib/recompute-queue.ts` - the burst coalescing
+  (`createRecomputeQueue`): one flush per burst with the union of its ids, the quiet period, the
+  deadline that stops a long import holding the first price hostage, and that two recomputes never
+  overlap. The clock is injected, so the timing is asserted rather than waited for.
 
 `src/workflows/recompute-fx-prices.ts` (the orchestration: fetching rates, querying the catalog,
-calling `upsertVariantPricesWorkflow`, re-reading and stamping the result), the scheduled job, and
-the admin API routes are deliberately thin glue around the tested functions above and are not unit
-tested - the same split `medusa-product-costs` and `medusa-allegro` use, since exercising them for
-real needs a live Medusa container and a live Postgres, which CI does not have (see the reference
-plugin's own README for the same reasoning, under "Known gap").
+writing prices, re-reading and stamping the result), the subscriber handler itself, the scheduled
+job, and the admin API routes are deliberately thin glue around the tested functions above and are
+not unit tested - the same split `medusa-product-costs` and `medusa-allegro` use, since exercising
+them for real needs a live Medusa container and a live Postgres, which CI does not have (see the
+reference plugin's own README for the same reasoning, under "Known gap").
 
 ## Roadmap
 

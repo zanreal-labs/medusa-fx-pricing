@@ -9,7 +9,11 @@ export default defineConfig({
         "src/**/models/**",
         "src/**/migrations/**",
       ],
-      include: ["src/modules/fx-pricing/**/*.ts", "src/workflows/**/*.ts"],
+      include: [
+        "src/modules/fx-pricing/**/*.ts",
+        "src/subscribers/**/*.ts",
+        "src/workflows/**/*.ts",
+      ],
       provider: "v8",
       reporter: ["text", "html"],
     },

@@ -14,8 +14,8 @@ kolejności. Gdy masz tę kolejność w głowie, reszta tej strony z niej wynika
   medusa-config.ts (opcje wtyczki)     ->  wartość zapasowa dla pustego nadpisania
 ```
 
-Każda ścieżka wykonania - codzienne zadanie, przycisk **Przelicz teraz**, trasa
-konfiguracyjna panelu - rozwiązuje to wszystko jedną metodą,
+Każda ścieżka wykonania - subskrybent zmiany ceny, codzienne zadanie, przycisk
+**Przelicz teraz**, trasa konfiguracyjna panelu - rozwiązuje to wszystko jedną metodą,
 `getResolvedRuntimeOptions()`, na początku każdego przebiegu. Nic nie jest
 zapamiętywane przy starcie procesu. Zmiana zapisana w panelu działa już przy
 najbliższym przebiegu, bez restartu.
@@ -118,6 +118,12 @@ Nadpisuje harmonogram zadania. Domyślnie `0 3 * * *`, czyli raz na dobę o 3:00
 To długo po zamknięciu okna publikacji tabeli A (11:15 czasu środkowoeuropejskiego)
 za poprzedni dzień i sporo przed godzinami handlu większości sklepów, więc zmiana
 ceny nigdy nie zdarza się w trakcie czyjejś sesji zakupowej.
+
+Zadanie jest zabezpieczeniem, a nie głównym mechanizmem - zmianę ceny w PLN
+łapie subskrybent w ciągu kilku sekund, a harmonogram rządzi wyłącznie nocnym
+przebiegiem po całym katalogu, który wyłapuje ruch kursu, cenę zapisaną poza
+workflow albo zdarzenie, które przepadło. Przesunięcie godziny to decyzja o tym,
+kiedy odbywa się ten przegląd, a nie o tym, jak szybko nowy produkt dostaje ceny.
 
 Akurat ta rzecz jest zmienną środowiskową z powodu konstrukcyjnego, nie
 stylistycznego. Medusa oblicza `config.schedule` zadania w momencie ładowania
@@ -244,6 +250,8 @@ zostaje zapisane.
 | --- | --- |
 | `ranAt` | Znacznik czasu przebiegu w formacie ISO |
 | `ran` | `false`, gdy przebieg nic nie zrobił, bo przełącznik był wyłączony |
+| `trigger` | Co uruchomiło przebieg: `scheduled`, `manual`, `event` albo `workflow` |
+| `scopedVariantCount` | Do ilu wariantów przebieg został zawężony, albo `null` przy przejściu całego katalogu |
 | `error` / `errorName` / `errorStack` | Obecne, gdy przebieg się nie powiódł. Komunikat jest prawdziwy, nigdy `"[object Object]"` |
 | `pricesWritten` | Ceny zapisane **i** oznaczone jako własne, łącznie we wszystkich walutach. `0` przy zakończonym przebiegu jest wprost pokazywane w panelu |
 | `currencies[kod].reached` | `false`, gdy przebieg skończył się, zanim doszedł do tej waluty |
@@ -282,8 +290,24 @@ import { recomputeFxPricesWorkflow, runFxPricingRecompute } from "@zanreal/medus
 ```
 
 `runFxPricingRecompute(container)` to zwykła funkcja asynchroniczna, którą wywołuje
-i zadanie, i trasa panelu. `recomputeFxPricesWorkflow` opakowuje ją jako workflow do
-złożenia w większą całość.
+i zadanie, i trasa panelu, i subskrybent. `recomputeFxPricesWorkflow` opakowuje ją
+jako workflow do złożenia w większą całość.
+
+Drugi argument zawęża i opisuje przebieg:
+
+```ts
+await runFxPricingRecompute(container, {
+  trigger: "event",              // "scheduled" | "manual" | "event" | "workflow"
+  variantIds: ["variant_01ABC"], // pomiń, żeby przejść cały katalog
+});
+```
+
+`variantIds` zmienia wyłącznie to, *które* warianty są czytane - każda reguła
+(przełącznik, odmowa przy braku marży, pomijanie walut, rozstrzygnięcie o ręcznym
+nadpisaniu, stemplowanie) to ten sam kod w obu przypadkach. **Pusta tablica
+oznacza zero wariantów**, a nie wszystkie: wywołujący, który zredukował swoje
+wejście do niczego, nie może wpaść w przecenę całego sklepu. Podsumowanie jako
+`last_run_summary` zapisuje tylko pełny przebieg; zawężony melduje się w logu.
 
 Kompensacji celowo nie ma. Każdy zapis to uzgodnienie cen wyprowadzonych z PLN w
 stronę celu policzonego na świeżo z bieżącej ceny w PLN i bieżącego kursu, więc
