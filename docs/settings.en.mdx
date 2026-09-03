@@ -14,8 +14,8 @@ Once you have that order, everything else on this page follows from it.
   medusa-config.ts (plugin options)   ->  the fallback for an unset override
 ```
 
-Every runtime path - the daily job, the **Recompute now** button, the admin config
-route - resolves all of this through one method,
+Every runtime path - the price-change subscriber, the daily job, the **Recompute
+now** button, the admin config route - resolves all of this through one method,
 `getResolvedRuntimeOptions()`, at the top of each run. Nothing is captured at boot.
 A change saved in the admin is live on the very next run, with no restart.
 
@@ -114,6 +114,12 @@ Overrides the job's schedule. Defaults to `0 3 * * *`: once a day at 03:00, whic
 is long after table A's 11:15 CET publication window has closed for the previous
 day and well before most stores' business hours, so a price change is never
 visible mid-session.
+
+The job is the backstop, not the mechanism - a PLN price change is picked up by
+the subscriber within seconds, and the schedule only governs the full nightly
+pass that catches a moved rate, a price written outside the workflows, or an
+event that was dropped. Moving it is a decision about when that sweep happens,
+not about how quickly a new product gets its prices.
 
 This one is an environment variable rather than a plugin option for a structural
 reason, not a stylistic one. Medusa evaluates a scheduled job's `config.schedule`
@@ -238,6 +244,8 @@ run - when the plugin is off, both get `{ "ran": false }` and nothing is written
 | --- | --- |
 | `ranAt` | ISO timestamp of the run |
 | `ran` | `false` when the run did nothing because the toggle was off |
+| `trigger` | What set the run going: `scheduled`, `manual`, `event` or `workflow` |
+| `scopedVariantCount` | How many variants the run was narrowed to, or `null` for a full catalogue pass |
 | `error` / `errorName` / `errorStack` | Present when the run failed. The message is the real one, never `"[object Object]"` |
 | `pricesWritten` | Prices written **and** stamped across every currency. `0` on a completed run is called out in the admin |
 | `currencies[code].reached` | `false` when the run ended before this currency's turn |
@@ -276,9 +284,25 @@ script, admin action or schedule:
 import { recomputeFxPricesWorkflow, runFxPricingRecompute } from "@zanreal/medusa-fx-pricing/workflows";
 ```
 
-`runFxPricingRecompute(container)` is the plain async function the job and the
-admin route both call. `recomputeFxPricesWorkflow` wraps it as a workflow for
-composition into a larger one.
+`runFxPricingRecompute(container)` is the plain async function the job, the admin
+route and the subscriber all call. `recomputeFxPricesWorkflow` wraps it as a
+workflow for composition into a larger one.
+
+A second argument narrows and labels the run:
+
+```ts
+await runFxPricingRecompute(container, {
+  trigger: "event",              // "scheduled" | "manual" | "event" | "workflow"
+  variantIds: ["variant_01ABC"], // omit for a full catalogue pass
+});
+```
+
+`variantIds` changes only *which* variants are read - every rule (the toggle, the
+margin refusal, the per-currency skips, the manual-override decision, the
+stamping) is the same code either way. An **empty array means no variants**, not
+all of them: a caller that resolved its input down to nothing must never fall
+through into repricing the whole store. Only a full pass persists its summary as
+`last_run_summary`; a narrowed one reports itself in the log.
 
 It is deliberately not compensated. Every write is a reconciliation of PLN-derived
 prices toward a target computed fresh from the current PLN price and the current

@@ -1,16 +1,16 @@
 ---
 title: Overview
-description: A Medusa v2 plugin that derives USD and EUR variant prices from a store's PLN price using the NBP table A mid rate, once a day, without ever overwriting a price a human set.
+description: A Medusa v2 plugin that derives USD and EUR variant prices from a store's PLN price using the NBP table A mid rate, the moment that PLN price changes, without ever overwriting a price a human set.
 ---
 
-`@zanreal/medusa-fx-pricing` answers one question, every day, for every variant
-in your catalogue: given what this costs in PLN, what should it say in USD and in
-EUR?
+`@zanreal/medusa-fx-pricing` answers one question, for every variant in your
+catalogue: given what this costs in PLN, what should it say in USD and in EUR?
 
 It takes the variant's own default PLN price, divides by the NBP (Narodowy Bank
 Polski, the Polish central bank) table A mid rate, multiplies by a margin you
 choose, and writes the result as that variant's default price in the target
-currency. Then it does the same thing tomorrow.
+currency. It does that the moment the PLN price changes, and again every night,
+because the rate moves even when your prices do not.
 
 ## The gap it fills
 
@@ -91,6 +91,31 @@ price list - is a decision somebody made deliberately, and this plugin has no
 business near it. It reads and writes exactly the price the product edit page's
 basic price grid shows.
 
+## When a run happens
+
+Three things start one, and they run the same code with the same rules.
+
+**A PLN price changed.** A subscriber listens for the product, variant and price
+events Medusa emits when a price is written, works out which variants are
+affected, and recomputes only those - within seconds. Create a product at 09:00
+and its USD and EUR prices exist at 09:00, not at 03:00 tomorrow.
+
+It does not act on its own writes. A price event is resolved back to a price row
+and kept only if that row is in PLN; this plugin only ever writes USD and EUR, so
+its own output is dropped before anything is planned. And a burst - a
+nine-variant save, a CSV import - is collected and recomputed once rather than
+once per event, so an import does not turn into a thousand requests to NBP.
+
+**The daily job, at 03:00.** A full pass over the catalogue, and the backstop for
+everything an event cannot tell anyone: the published rate moved while your
+prices did not, a price was written by raw SQL, an event was dropped over a
+restart. This is also the only run whose summary is stored as "the last run" on
+the settings page - a two-variant run reacting to one product save reports itself
+in the log instead of overwriting the catalogue-wide picture.
+
+**You pressed Recompute now.** A full pass, immediately, from
+**Settings > FX pricing**.
+
 ## Install
 
 This package is not on npm yet. It installs as a git dependency, pinned to a
@@ -144,9 +169,10 @@ npx medusa db:migrate
 ## After installing, nothing happens
 
 That is deliberate, and it is the first thing to know. A fresh install is inert:
-`enabled` seeds to `false`, and while it is off both the daily job and the manual
-recompute button do nothing and say so. A plugin that repriced a live catalogue
-the moment it was installed would be a plugin nobody could safely try.
+`enabled` seeds to `false`, and while it is off the subscriber, the daily job and
+the manual recompute button all do nothing and say so. A plugin that repriced a
+live catalogue the moment it was installed would be a plugin nobody could safely
+try.
 
 Open **Settings > FX pricing**, set a margin, flip the toggle, and press
 **Recompute now** to watch a full run happen while you are looking at it. The

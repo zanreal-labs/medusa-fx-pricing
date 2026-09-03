@@ -1,5 +1,5 @@
 {
   "title": "FX Pricing",
-  "description": "@zanreal/medusa-fx-pricing derives USD and EUR variant prices daily from the NBP table A mid rate, with a margin you choose and manual prices left untouched.",
+  "description": "@zanreal/medusa-fx-pricing derives USD and EUR variant prices from the NBP table A mid rate the moment the PLN price changes, with a margin you choose and manual prices left untouched.",
   "pages": ["index", "rates", "overrides", "settings"]
 }

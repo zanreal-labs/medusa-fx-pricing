@@ -1,13 +1,14 @@
 ---
 title: Wprowadzenie
-description: "Wtyczka do Medusy v2, która co dobę przelicza ceny wariantów na USD i EUR z ceny w PLN po średnim kursie z tabeli A NBP i nigdy nie nadpisuje ceny wpisanej ręcznie."
+description: "Wtyczka do Medusy v2, która przelicza ceny wariantów na USD i EUR z ceny w PLN po średnim kursie z tabeli A NBP w chwili zmiany tej ceny i nigdy nie nadpisuje ceny wpisanej ręcznie."
 ---
 
 Sprzedajesz w złotówkach, a na wystawie mają stać jeszcze dolary i euro.
-`@zanreal/medusa-fx-pricing` bierze na siebie dokładnie tę jedną rzecz: raz na
-dobę czyta cenę PLN każdego wariantu, przelicza ją po średnim kursie z tabeli A
-NBP, dokłada marżę, którą wybrałeś, i zapisuje wynik jako cenę tego wariantu w
-walucie docelowej.
+`@zanreal/medusa-fx-pricing` bierze na siebie dokładnie tę jedną rzecz: czyta
+cenę PLN wariantu, przelicza ją po średnim kursie z tabeli A NBP, dokłada marżę,
+którą wybrałeś, i zapisuje wynik jako cenę tego wariantu w walucie docelowej.
+Robi to w chwili, w której cena w PLN się zmienia, i jeszcze raz każdej nocy, bo
+kurs rusza się także wtedy, gdy Twoje ceny stoją.
 
 ## Obietnica, od której wszystko się zaczyna
 
@@ -97,6 +98,33 @@ nadpisanie dla regionu, cena dla grupy klientów, próg ilościowy albo cokolwie
 cennika, to czyjaś świadoma decyzja i wtyczka trzyma się od niej z daleka. Rusza
 dokładnie tę cenę, którą widzisz w podstawowej siatce cen na stronie produktu.
 
+## Kiedy przebieg się uruchamia
+
+Uruchamiają go trzy rzeczy i wszystkie trzy wykonują ten sam kod, z tymi samymi
+regułami.
+
+**Zmieniła się cena w PLN.** Subskrybent nasłuchuje zdarzeń produktu, wariantu i
+ceny, które Medusa wysyła przy zapisie ceny, ustala, których wariantów to dotyczy,
+i przelicza wyłącznie je - w ciągu kilku sekund. Zakładasz produkt o 9:00 i o 9:00
+ma on ceny w USD i EUR, a nie dopiero o 3:00 następnego dnia.
+
+Na własnych zapisach wtyczka nie reaguje. Zdarzenie o cenie jest rozwiązywane z
+powrotem do wiersza ceny i brane pod uwagę tylko wtedy, gdy ten wiersz jest w PLN;
+wtyczka zapisuje wyłącznie USD i EUR, więc jej własny wynik odpada, zanim
+cokolwiek zostanie zaplanowane. Seria zdarzeń - zapis wariantu z dziewięcioma
+cenami, import z pliku - jest zbierana i przeliczana raz, a nie raz na zdarzenie,
+żeby import nie zamienił się w tysiąc zapytań do NBP.
+
+**Codzienne zadanie, o 3:00.** Pełny przebieg po całym katalogu i zabezpieczenie
+na wszystko, czego żadne zdarzenie nie powie: opublikowany kurs się zmienił, choć
+Twoje ceny nie, cenę zapisał surowy SQL, zdarzenie przepadło przy restarcie. To
+także jedyny przebieg, którego podsumowanie trafia na stronę ustawień jako
+„ostatni przebieg” - przeliczenie dwóch wariantów po zapisie jednego produktu
+melduje się w logu, zamiast nadpisywać obraz całego katalogu.
+
+**Nacisnąłeś Przelicz teraz.** Pełny przebieg, natychmiast, z poziomu
+**Ustawienia > Ceny walutowe**.
+
 ## Instalacja
 
 Tego pakietu nie ma jeszcze na npmie. Instaluje się go jako zależność gitową,
@@ -152,8 +180,9 @@ npx medusa db:migrate
 ## Zaraz po instalacji nic się nie dzieje
 
 I bardzo dobrze. Świeża instalacja jest bezczynna: `enabled` startuje jako
-`false`, a dopóki przełącznik jest wyłączony, i codzienne zadanie, i przycisk
-ręcznego przeliczenia nie robią nic i mówią o tym wprost. Wtyczka, która
+`false`, a dopóki przełącznik jest wyłączony, ani subskrybent, ani codzienne
+zadanie, ani przycisk ręcznego przeliczenia nie robią nic i mówią o tym
+wprost. Wtyczka, która
 przecenia żywy katalog w chwili instalacji, to wtyczka, której nikt nie odważy się
 wypróbować.
 

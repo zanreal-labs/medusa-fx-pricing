@@ -9,13 +9,19 @@ import {
   formatError,
   isRateStale,
 } from "../modules/fx-pricing";
-import type { CurrencyRunSummary, FxSourceCurrency, RunSummary } from "../modules/fx-pricing";
+import type {
+  CurrencyRunSummary,
+  FxPricingRunTrigger,
+  FxSourceCurrency,
+  RunSummary,
+} from "../modules/fx-pricing";
 import type FxPricingModuleService from "../modules/fx-pricing/service";
 import {
   fetchPriceSetIdsByVariantIds,
   fetchStoreSupportedCurrencyCodes,
   fetchVariantPricesByIds,
   listCatalogVariants,
+  listCatalogVariantsByIds,
 } from "./lib/catalog";
 import { planCurrencyRecompute } from "./lib/plan";
 import type { PlannedWrite, VariantForPlanning } from "./lib/plan";
@@ -54,8 +60,38 @@ function emptyCurrencySummary(): CurrencyRunSummary {
 }
 
 /** A run that did nothing because the toggle is off - the module service's `effectiveEnabled` was `false`. */
-function skippedDisabledSummary(): RunSummary {
-  return { currencies: {}, pricesWritten: 0, ran: false, ranAt: new Date().toISOString() };
+function skippedDisabledSummary(
+  trigger: FxPricingRunTrigger,
+  scopedVariantIds: readonly string[] | undefined,
+): RunSummary {
+  return {
+    currencies: {},
+    pricesWritten: 0,
+    ran: false,
+    ranAt: new Date().toISOString(),
+    scopedVariantCount: scopedVariantIds?.length ?? null,
+    trigger,
+  };
+}
+
+/**
+ * How a caller narrows and labels one recompute run.
+ */
+export interface FxPricingRecomputeOptions {
+  /**
+   * Recompute only these variant ids, leaving the rest of the catalog
+   * untouched. `undefined` - the default - is the full pass the daily backstop
+   * job makes.
+   *
+   * An EMPTY array is deliberately NOT the same as `undefined`: it is honoured
+   * literally as "no variants", and the run ends without reading a rate or a
+   * price. A subscriber that resolved its event down to nothing must never fall
+   * through into repricing the whole store, and "empty means everything" is
+   * exactly how that would happen.
+   */
+  variantIds?: readonly string[];
+  /** What set this run going. Defaults to `"scheduled"` - see `FxPricingRunTrigger`. */
+  trigger?: FxPricingRunTrigger;
 }
 
 /**
@@ -110,20 +146,28 @@ async function applyWrite(options: {
 }
 
 /**
- * The whole daily/manual recompute, as a plain async function - not a
- * `createStep` body directly, so it can be called straight from the
- * scheduled job and the manual "recompute now" admin route, the same way
- * the sibling `medusa-allegro` plugin's `runOfferDiscovery` is (see that
- * plugin's `src/jobs/allegro-offer-sync.ts` and
- * `src/api/admin/allegro/sync/route.ts` for the precedent). `recomputeFxPricesWorkflow`
- * below wraps this same function in a one-step workflow for callers that
- * want it composed into a larger workflow.
+ * The whole recompute, as a plain async function - not a `createStep` body
+ * directly, so it can be called straight from the scheduled job, the manual
+ * "recompute now" admin route and the subscriber, the same way the sibling
+ * `medusa-allegro` plugin's `runOfferDiscovery` is (see that plugin's
+ * `src/jobs/allegro-offer-sync.ts` and `src/api/admin/allegro/sync/route.ts`
+ * for the precedent). `recomputeFxPricesWorkflow` below wraps this same
+ * function in a one-step workflow for callers that want it composed into a
+ * larger workflow.
  *
  * Gated by the toggle INSIDE this function (not by each caller separately),
- * so the job and the manual action can never disagree about whether they are
- * allowed to run - both call this and both get the same
- * `{ ran: false }` when the plugin is off, and both log/report from the same
- * `RunSummary` shape.
+ * so the job, the manual action and the subscriber can never disagree about
+ * whether they are allowed to run - all three call this and all three get the
+ * same `{ ran: false }` when the plugin is off, and all three log/report from
+ * the same `RunSummary` shape.
+ *
+ * `options.variantIds` narrows the run to specific variants. That is what makes
+ * the event-driven path possible at all: a product save can reprice the two
+ * variants it touched in a filtered query instead of rescanning the catalog.
+ * The narrowing changes only WHICH variants are read - every rule below (the
+ * toggle, the margin refusal, the per-currency skips, the manual-override
+ * decision, the stamping) applies identically, because there is exactly one
+ * implementation of them.
  *
  * ## What this function promises about its own report
  *
@@ -146,9 +190,21 @@ async function applyWrite(options: {
  *    into nothing.
  * 5. **A run that writes nothing says so**, with the numbers that explain why.
  */
-export async function runFxPricingRecompute(container: MedusaContainer): Promise<RunSummary> {
+export async function runFxPricingRecompute(
+  container: MedusaContainer,
+  options: FxPricingRecomputeOptions = {},
+): Promise<RunSummary> {
   const logger = container.resolve<Logger>(ContainerRegistrationKeys.LOGGER);
   const fxPricing: FxPricingModuleService = container.resolve(FX_PRICING_MODULE);
+  const scopedVariantIds = options.variantIds;
+  const trigger = options.trigger ?? "scheduled";
+  // Appended to the per-currency log line only when the run IS narrowed, so a
+  // full pass logs exactly what it always logged and a narrowed one is never
+  // mistaken for a catalog-wide result.
+  const scopeSuffix =
+    scopedVariantIds === undefined
+      ? ""
+      : ` (${scopedVariantIds.length} variant${scopedVariantIds.length === 1 ? "" : "s"})`;
 
   const runtimeOptions = await fxPricing.getResolvedRuntimeOptions();
   if (!runtimeOptions.effectiveEnabled) {
@@ -156,7 +212,7 @@ export async function runFxPricingRecompute(container: MedusaContainer): Promise
       ? "disabled (FX_PRICING_DISABLED is set)"
       : "disabled (Settings > FX pricing)";
     logger.info(`[fx-pricing] skipped (${reason})`);
-    return skippedDisabledSummary();
+    return skippedDisabledSummary(trigger, scopedVariantIds);
   }
 
   const summary: RunSummary = {
@@ -164,11 +220,21 @@ export async function runFxPricingRecompute(container: MedusaContainer): Promise
     pricesWritten: 0,
     ran: true,
     ranAt: new Date().toISOString(),
+    scopedVariantCount: scopedVariantIds?.length ?? null,
+    trigger,
   };
   // Seeded before anything can fail, so an aborted run still reports every
   // currency it was supposed to price - see promise 1 above.
   for (const currency of TARGET_CURRENCIES) {
     summary.currencies[currency] = emptyCurrencySummary();
+  }
+
+  if (scopedVariantIds !== undefined && scopedVariantIds.length === 0) {
+    // Narrowed to nothing. Returned here rather than falling into the loop so
+    // an event that resolved to no variants costs no NBP request - see
+    // `FxPricingRecomputeOptions.variantIds` for why this is not treated as
+    // "the whole catalog".
+    return summary;
   }
 
   try {
@@ -190,7 +256,9 @@ export async function runFxPricingRecompute(container: MedusaContainer): Promise
 
     const [supportedCurrencies, catalogVariants] = await Promise.all([
       fetchStoreSupportedCurrencyCodes(container),
-      listCatalogVariants(container),
+      scopedVariantIds === undefined
+        ? listCatalogVariants(container)
+        : listCatalogVariantsByIds(container, scopedVariantIds),
     ]);
 
     for (const currency of TARGET_CURRENCIES) {
@@ -360,7 +428,7 @@ export async function runFxPricingRecompute(container: MedusaContainer): Promise
         }
 
         logger.info(
-          `[fx-pricing] ${currency.toUpperCase()}: rate=${rate.mid} (${rate.effectiveDate}) created=${currencySummary.created}/${currencySummary.plannedCreates} updated=${currencySummary.updated}/${currencySummary.plannedUpdates} unchanged=${currencySummary.unchanged} skippedManualOverride=${currencySummary.skippedManualOverride} skippedNoPlnPrice=${currencySummary.skippedNoPlnPrice} skippedQuantityTiered=${currencySummary.skippedQuantityTiered} stampFailed=${currencySummary.stampFailed}`,
+          `[fx-pricing] ${currency.toUpperCase()}${scopeSuffix}: rate=${rate.mid} (${rate.effectiveDate}) created=${currencySummary.created}/${currencySummary.plannedCreates} updated=${currencySummary.updated}/${currencySummary.plannedUpdates} unchanged=${currencySummary.unchanged} skippedManualOverride=${currencySummary.skippedManualOverride} skippedNoPlnPrice=${currencySummary.skippedNoPlnPrice} skippedQuantityTiered=${currencySummary.skippedQuantityTiered} stampFailed=${currencySummary.stampFailed}`,
         );
       } catch (error) {
         // One currency's failure is that currency's failure. The next one is
@@ -403,15 +471,32 @@ export async function runFxPricingRecompute(container: MedusaContainer): Promise
       }
       return `${currency.toUpperCase()}: unchanged=${currencySummary.unchanged} manualOverride=${currencySummary.skippedManualOverride} noPlnPrice=${currencySummary.skippedNoPlnPrice} quantityTiered=${currencySummary.skippedQuantityTiered} stampFailed=${currencySummary.stampFailed}`;
     }).join("; ");
-    logger.warn(`[fx-pricing] finished without writing a single price. ${reasons}`);
+    const message = `[fx-pricing] finished without writing a single price${scopeSuffix}. ${reasons}`;
+    // A FULL pass that writes nothing is the thing promise 5 exists to shout
+    // about. A NARROWED one is the ordinary outcome of saving a product whose
+    // PLN price did not move - warning on every one of those would train an
+    // operator to ignore the warning that matters.
+    if (scopedVariantIds === undefined) {
+      logger.warn(message);
+    } else {
+      logger.debug(message);
+    }
   }
 
-  try {
-    await fxPricing.recordRunSummary(summary);
-  } catch (error) {
-    logger.warn(
-      `[fx-pricing] recompute finished but the run summary could not be persisted: ${formatError(error)}`,
-    );
+  if (scopedVariantIds === undefined) {
+    // Only a full pass is persisted. `last_run_summary` is a single column and
+    // Settings > FX pricing renders it as "the last run" - letting a
+    // two-variant, event-driven run overwrite it would replace the catalog-wide
+    // picture with counters that are true of two variants and of nothing else,
+    // dozens of times a day. Narrowed runs report themselves in the log instead;
+    // see `src/subscribers`.
+    try {
+      await fxPricing.recordRunSummary(summary);
+    } catch (error) {
+      logger.warn(
+        `[fx-pricing] recompute finished but the run summary could not be persisted: ${formatError(error)}`,
+      );
+    }
   }
 
   return summary;
@@ -420,7 +505,7 @@ export async function runFxPricingRecompute(container: MedusaContainer): Promise
 const recomputeFxPricesStep = createStep(
   "recompute-fx-prices",
   async (_input: void, { container }: { container: MedusaContainer }) =>
-    new StepResponse(await runFxPricingRecompute(container)),
+    new StepResponse(await runFxPricingRecompute(container, { trigger: "workflow" })),
 );
 
 /**

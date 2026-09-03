@@ -12,6 +12,6 @@ import { runFxPricingRecompute } from "../../../../workflows/recompute-fx-prices
  * duplicating that check and risking the two disagreeing.
  */
 export async function POST(req: MedusaRequest, res: MedusaResponse): Promise<void> {
-  const summary = await runFxPricingRecompute(req.scope);
+  const summary = await runFxPricingRecompute(req.scope, { trigger: "manual" });
   res.json({ summary });
 }

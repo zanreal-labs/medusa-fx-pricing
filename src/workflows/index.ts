@@ -6,4 +6,5 @@
  */
 
 export { recomputeFxPricesWorkflow, runFxPricingRecompute } from "./recompute-fx-prices";
+export type { FxPricingRecomputeOptions } from "./recompute-fx-prices";
 export { updateFxPricingSettingsWorkflow } from "./update-fx-pricing-settings";

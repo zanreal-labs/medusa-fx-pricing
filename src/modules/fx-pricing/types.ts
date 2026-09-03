@@ -182,6 +182,25 @@ export interface CurrencyRunSummary {
 }
 
 /**
+ * What set a recompute run going.
+ *
+ * Kept on the summary because the three runtime paths produce an otherwise
+ * identical report, and telling them apart is the difference between "the
+ * 03:00 backstop found nothing to do" and "the subscriber reacted to a price
+ * edit and found nothing to do" - which mean opposite things when an operator
+ * is checking whether the event path is wired up at all.
+ */
+export type FxPricingRunTrigger =
+  /** The daily `fx-pricing-daily-recompute` job - the backstop. */
+  | "scheduled"
+  /** The admin's "Recompute now" button (`POST /admin/fx-pricing/recompute`). */
+  | "manual"
+  /** The subscriber, reacting to a PLN price change - see `src/subscribers`. */
+  | "event"
+  /** `recomputeFxPricesWorkflow`, composed into a host project's own workflow. */
+  | "workflow";
+
+/**
  * The full summary of one recompute run, persisted as
  * `fx_pricing_settings.last_run_summary` (a `model.json()` column, typed as
  * `Record<string, unknown>` by the generated service methods). The index
@@ -194,6 +213,16 @@ export interface RunSummary {
   ranAt: string;
   /** `false` when the run did nothing because the toggle was off - see the job. */
   ran: boolean;
+  /** What set this run going - see `FxPricingRunTrigger`. */
+  trigger: FxPricingRunTrigger;
+  /**
+   * How many variants this run was narrowed to, or `null` for a full catalog
+   * pass. Only an event-driven run is ever narrowed; the daily backstop and the
+   * manual action never are. The distinction matters when reading the counters
+   * below - `skippedNoPlnPrice: 0` across a two-variant run says nothing about
+   * the other four thousand variants in the store.
+   */
+  scopedVariantCount: number | null;
   currencies: Partial<Record<FxSourceCurrency, CurrencyRunSummary>>;
   /**
    * Prices written AND stamped across every currency in this run. This is the
