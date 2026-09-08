@@ -12,8 +12,9 @@ after the change.
 
 ## [Unreleased]
 
-Everything below is on `main` and has not been published. Install it as a pinned git
-dependency if you need it before the next release.
+Nothing yet.
+
+## [0.2.0] - 2026-09-08
 
 ### Added
 
@@ -46,5 +47,6 @@ First public release. MIT, published from CI with npm provenance.
   is visible instead of being skipped.
 - Admin UI in English and Polish, with the sidebar label resolved through i18n.
 
-[Unreleased]: https://github.com/zanreal-labs/medusa-fx-pricing/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/zanreal-labs/medusa-fx-pricing/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/zanreal-labs/medusa-fx-pricing/releases/tag/v0.2.0
 [0.1.0]: https://github.com/zanreal-labs/medusa-fx-pricing/releases/tag/v0.1.0
