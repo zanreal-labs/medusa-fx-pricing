@@ -14,6 +14,14 @@ after the change.
 
 Nothing yet.
 
+## [0.2.1] - 2026-09-08
+
+### Fixed
+
+- The install line no longer pins a version number. It named `0.1.0` explicitly,
+  so it went stale the moment a release shipped and contradicted the version npm
+  resolves. The `npm install` command below it was always version-less and correct.
+
 ## [0.2.0] - 2026-09-08
 
 ### Added
@@ -47,6 +55,7 @@ First public release. MIT, published from CI with npm provenance.
   is visible instead of being skipped.
 - Admin UI in English and Polish, with the sidebar label resolved through i18n.
 
-[Unreleased]: https://github.com/zanreal-labs/medusa-fx-pricing/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/zanreal-labs/medusa-fx-pricing/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/zanreal-labs/medusa-fx-pricing/releases/tag/v0.2.1
 [0.2.0]: https://github.com/zanreal-labs/medusa-fx-pricing/releases/tag/v0.2.0
 [0.1.0]: https://github.com/zanreal-labs/medusa-fx-pricing/releases/tag/v0.1.0
