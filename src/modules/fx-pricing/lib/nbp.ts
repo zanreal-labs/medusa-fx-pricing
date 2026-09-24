@@ -13,6 +13,8 @@
  * rate is a few days old - see `isRateStale` below.
  */
 
+import { MedusaError } from "@medusajs/framework/utils";
+
 export type FxSourceCurrency = "usd" | "eur";
 
 /** One parsed NBP table A rate, ready for `computeForeignAmount`. */
@@ -43,12 +45,12 @@ const NBP_BASE_URL = "https://api.nbp.pl/api/exchangerates/rates/a";
  */
 export function parseNbpRatesResponse(json: unknown, currency: FxSourceCurrency): NbpRate {
   if (typeof json !== "object" || json === null) {
-    throw new Error(`NBP response for ${currency} was not a JSON object`);
+    throw new MedusaError(MedusaError.Types.UNEXPECTED_STATE, `NBP response for ${currency} was not a JSON object`);
   }
   const body = json as Record<string, unknown>;
   const rates = body.rates;
   if (!Array.isArray(rates) || rates.length === 0) {
-    throw new Error(`NBP response for ${currency} had no "rates" entries`);
+    throw new MedusaError(MedusaError.Types.UNEXPECTED_STATE, `NBP response for ${currency} had no "rates" entries`);
   }
   // Table A carries one rate per response (the latest, absent a date suffix
   // on the request) - the first entry is the one NBP intends as current.
@@ -57,10 +59,10 @@ export function parseNbpRatesResponse(json: unknown, currency: FxSourceCurrency)
   const effectiveDate = latest.effectiveDate;
   const tableNo = latest.no;
   if (typeof mid !== "number" || !Number.isFinite(mid) || mid <= 0) {
-    throw new Error(`NBP response for ${currency} had a non-numeric or non-positive "mid" rate`);
+    throw new MedusaError(MedusaError.Types.UNEXPECTED_STATE, `NBP response for ${currency} had a non-numeric or non-positive "mid" rate`);
   }
   if (typeof effectiveDate !== "string" || !effectiveDate) {
-    throw new Error(`NBP response for ${currency} was missing "effectiveDate"`);
+    throw new MedusaError(MedusaError.Types.UNEXPECTED_STATE, `NBP response for ${currency} was missing "effectiveDate"`);
   }
   return {
     currency,
@@ -83,7 +85,7 @@ export async function fetchNbpRate(
     headers: { Accept: "application/json" },
   });
   if (!response.ok) {
-    throw new Error(`NBP request for ${currency} failed with status ${response.status}`);
+    throw new MedusaError(MedusaError.Types.UNEXPECTED_STATE, `NBP request for ${currency} failed with status ${response.status}`);
   }
   const json = await response.json();
   return parseNbpRatesResponse(json, currency);

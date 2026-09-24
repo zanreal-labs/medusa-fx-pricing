@@ -1,3 +1,4 @@
+import { MedusaError } from "@medusajs/framework/utils";
 import { computeForeignAmount } from "../../modules/fx-pricing/lib/compute";
 import type { VatAdjustment } from "../../modules/fx-pricing/lib/compute";
 import { decidePriceAction } from "../../modules/fx-pricing/lib/decision";
@@ -142,7 +143,7 @@ export function planCurrencyRecompute(
       default: {
         // Exhaustiveness guard - a new PriceDecision variant must be handled above.
         const neverDecision: never = decision;
-        throw new Error(`Unhandled price decision: ${JSON.stringify(neverDecision)}`);
+        throw new MedusaError(MedusaError.Types.UNEXPECTED_STATE, `Unhandled price decision: ${JSON.stringify(neverDecision)}`);
       }
     }
   }
