@@ -1,6 +1,6 @@
 import type { SubscriberArgs, SubscriberConfig } from "@medusajs/framework";
 import type { Logger, MedusaContainer } from "@medusajs/framework/types";
-import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
+import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils";
 import { FX_PRICING_MODULE, formatError } from "../modules/fx-pricing";
 import type FxPricingModuleService from "../modules/fx-pricing/service";
 import {
@@ -141,7 +141,7 @@ async function resolveVariantIds(
     default: {
       // Exhaustiveness guard - a new `FxPricingEventSubject` must be handled above.
       const neverSubject: never = parsed.subject;
-      throw new Error(`Unhandled fx-pricing event subject: ${String(neverSubject)}`);
+      throw new MedusaError(MedusaError.Types.UNEXPECTED_STATE, `Unhandled fx-pricing event subject: ${String(neverSubject)}`);
     }
   }
 }
