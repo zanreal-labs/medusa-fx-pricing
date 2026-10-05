@@ -31,7 +31,7 @@ importers:
         version: 2.21.1
       '@medusajs/medusa':
         specifier: 2.21.1
-        version: 2.21.1(@medusajs/admin-sdk@2.21.1)(@medusajs/cli@2.21.1(@types/node@20.19.43))(@medusajs/dashboard@2.21.1(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(ajv@8.13.0)(typescript@5.9.3))(@medusajs/framework@2.21.1(@medusajs/cli@2.21.1(@types/node@20.19.43))(@types/node@20.19.43)(ioredis@5.11.1)(vite@7.3.6(@types/node@20.19.43)(jiti@2.7.0)(yaml@2.9.1))(zod@4.2.0))(@medusajs/icons@2.21.1(react@18.3.1))(@medusajs/test-utils@2.21.1)(@medusajs/ui@4.2.5(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@20.19.43)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(ajv@8.13.0)(awilix@8.0.1)(jiti@2.7.0)(picomatch@4.0.7)(posthog-node@5.48.1(rxjs@7.8.2))(react-dom@18.3.1(react@18.3.1))(react-router-dom@7.18.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)(yalc@1.0.0-pre.53)(yaml@2.9.1)
+        version: 2.21.1(@medusajs/admin-sdk@2.21.1)(@medusajs/cli@2.21.1(@types/node@20.19.43))(@medusajs/dashboard@2.21.1(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(ajv@8.13.0)(typescript@5.9.3))(@medusajs/framework@2.21.1(@medusajs/cli@2.21.1(@types/node@20.19.43))(@types/node@20.19.43)(ioredis@5.11.1)(vite@7.3.6(@types/node@20.19.43)(jiti@2.7.0)(yaml@2.9.1))(zod@4.2.0))(@medusajs/icons@2.21.1(react@18.3.1))(@medusajs/test-utils@2.21.1)(@medusajs/ui@4.2.5(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@swc/core@1.16.13(@swc/helpers@0.5.23))(@types/node@20.19.43)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(ajv@8.13.0)(awilix@8.0.1)(jiti@2.7.0)(picomatch@4.0.7)(posthog-node@5.48.1(rxjs@7.8.2))(react-dom@18.3.1(react@18.3.1))(react-router-dom@7.18.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)(yalc@1.0.0-pre.53)(yaml@2.9.1)
       '@medusajs/test-utils':
         specifier: 2.21.1
         version: 2.21.1(@medusajs/core-flows@2.21.1(@medusajs/framework@2.21.1(@medusajs/cli@2.21.1(@types/node@20.19.43))(@types/node@20.19.43)(ioredis@5.11.1)(vite@7.3.6(@types/node@20.19.43)(jiti@2.7.0)(yaml@2.9.1))(zod@4.2.0)))(@medusajs/framework@2.21.1(@medusajs/cli@2.21.1(@types/node@20.19.43))(@types/node@20.19.43)(ioredis@5.11.1)(vite@7.3.6(@types/node@20.19.43)(jiti@2.7.0)(yaml@2.9.1))(zod@4.2.0))(@medusajs/medusa@2.21.1)
@@ -40,7 +40,7 @@ importers:
         version: 4.2.5(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
       '@swc/core':
         specifier: ^1.16.2
-        version: 1.16.2(@swc/helpers@0.5.23)
+        version: 1.16.13(@swc/helpers@0.5.23)
       '@types/node':
         specifier: ^20.19.43
         version: 20.19.43
@@ -70,7 +70,7 @@ importers:
         version: 13.5.0(i18next@23.7.11)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       ts-node:
         specifier: ^10.9.2
-        version: 10.9.2(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@20.19.43)(typescript@5.9.3)
+        version: 10.9.2(@swc/core@1.16.13(@swc/helpers@0.5.23))(@types/node@20.19.43)(typescript@5.9.3)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -95,17 +95,8 @@ packages:
     peerDependencies:
       graphql: '*'
 
-  '@ariakit/components@0.1.10':
-    resolution: {integrity: sha512-fRcCq48nSO7H5WT1m23LufjzRFnj7wsNRpJlBEIAwLmkpNIG7pvevXaob2flEvRQr97HeHF5l2CIwKc304VOmA==}
-
   '@ariakit/components@0.1.13':
     resolution: {integrity: sha512-s2tlnFMCjl7giCKD7TX5pHkRjl7rM0DIWXKytGnyrX1nSOagQ/89sigZJVtxZefcqnbc+4KUWF58VatSHxNmBQ==}
-
-  '@ariakit/react-components@0.4.1':
-    resolution: {integrity: sha512-Q1CebbG1AFgj5S6FvuhpcRDcPfQOHg8ocAjJ8QEysLcecp7IHX3pEcZ4RZsCwSCL1GxJ9UM+Wza30nIfUH5JMw==}
-    peerDependencies:
-      react: ^17.0.0 || ^18.0.0 || ^19.0.0
-      react-dom: ^17.0.0 || ^18.0.0 || ^19.0.0
 
   '@ariakit/react-components@0.6.1':
     resolution: {integrity: sha512-vwgSmJUB+HhYJci6CojHNSxUPgDosxo+1Y6d9HqEUSdmswFufFQg9Hog8BB1c/mKnxBg6/wdrc7p7iwQotisfQ==}
@@ -118,26 +109,10 @@ packages:
     peerDependencies:
       react: ^17.0.0 || ^18.0.0 || ^19.0.0
 
-  '@ariakit/react-store@0.1.9':
-    resolution: {integrity: sha512-5n9RwDDwo2pnDbv5phlttpRUQlXot1J/K3efFSoQlivNSBu7dFf3js6rj7mWtFHhwx6HCjxvp1Q/BJpYtgUf+g==}
-    peerDependencies:
-      react: ^17.0.0 || ^18.0.0 || ^19.0.0
-
-  '@ariakit/react-utils@0.2.4':
-    resolution: {integrity: sha512-MzW0Sqhooa4xHUaFXaDnENqwtaXORCBkYLmZPkVYPhJBg/kqI6UCJkkuJcnkSh708yBooi+EOh0EP/eEvWBsFQ==}
-    peerDependencies:
-      react: ^17.0.0 || ^18.0.0 || ^19.0.0
-
   '@ariakit/react-utils@0.2.6':
     resolution: {integrity: sha512-pjHqtwu6CgBgXmkkZQPuXbtuZXcfV25kRkIokLdbE3vrytKdgqRjRAPQ+4Qamwz4n5M6kFnA2Iwd4BK+egatpw==}
     peerDependencies:
       react: ^17.0.0 || ^18.0.0 || ^19.0.0
-
-  '@ariakit/react@0.4.37':
-    resolution: {integrity: sha512-ifVmhGI5XUotjXNEza+AXhx95ksuSWY61lujgYPt7Zf0gS6mSIFplVi8bn9kYxmVhlKeC1kjPNP/KVOGmmruwQ==}
-    peerDependencies:
-      react: ^17.0.0 || ^18.0.0 || ^19.0.0
-      react-dom: ^17.0.0 || ^18.0.0 || ^19.0.0
 
   '@ariakit/react@0.4.40':
     resolution: {integrity: sha512-cfGfuK1oDVp+2B1n0AgB899K7CHDWoDn4mbdDv6URcmLozlBpV3oUIi9nD9xZV6jAAjvCEcq29jEnicQUEGusw==}
@@ -147,12 +122,6 @@ packages:
 
   '@ariakit/store@0.1.10':
     resolution: {integrity: sha512-NKjmUzB8wCf4oZX9Ao50ja1SrVw4MMZWI4ednoQNB0qtbHlUN4vTSFqhotvUOXnXv0n26Zk4/HB4SsVgLJ5ebg==}
-
-  '@ariakit/store@0.1.8':
-    resolution: {integrity: sha512-UEvinG84EDb2vqs0ER5GDD9TyMXWddrPVIg9PO3Nqdsfa0YMTTpe7xaw/PeGjarmvbepoiMbhDw/Wns230GLXA==}
-
-  '@ariakit/utils@0.1.6':
-    resolution: {integrity: sha512-oI2863azKhrFrffsOszK3g+ds2yC0gIFSkBZyHWesHco+lcvKho//McNZQFo/pglnlKPazeR0+/9gO9xkwjzNA==}
 
   '@ariakit/utils@0.2.1':
     resolution: {integrity: sha512-hJs71Orklyw1tW2bCrDdEDp2nEv6I2c3iP1bof88Chd3rTuJIHAp+3a3yDwU5UKjM3baB6QDrCg4x6jABgsEyw==}
@@ -2672,86 +2641,86 @@ packages:
   '@standard-schema/utils@0.3.0':
     resolution: {integrity: sha512-e7Mew686owMaPJVNNLs55PUvgz371nKgwsc4vxE49zsODpJEnxgxRo2y/OKrqueavXgZNMDVj3DdHFlaSAeU8g==}
 
-  '@swc/core-darwin-arm64@1.16.2':
-    resolution: {integrity: sha512-i/j0HNbnn79qnTVPicvay92Nark8fW8NQqn1e2mGERjUXNpBV0+SwQxlRpk2zBhn6laJ8PDI6Kn1nHZhnz3LCA==}
+  '@swc/core-darwin-arm64@1.16.13':
+    resolution: {integrity: sha512-JrMH2h7ohd4mOIneNRx/diqTmCDSdWfp9uOdQ8VJ2V2CA7jOJ1jWb+qp8RoZLqgiVmwDDC7eySKB1kbvZ+jVXQ==}
     engines: {node: '>=10'}
     cpu: [arm64]
     os: [darwin]
 
-  '@swc/core-darwin-x64@1.16.2':
-    resolution: {integrity: sha512-HrwqHyEyHVXO3qTk8EkNK7/b6sOZSEoNh+pot6RdE5x0LbNqfo8LtJUvi3UTXr+5ja/o5HbJdW80eCXo+NjbiA==}
+  '@swc/core-darwin-x64@1.16.13':
+    resolution: {integrity: sha512-HauZMRxpOImRxgY6GXjw5gbD8ts2NcPZuLMM8htY8Mic7j1Izt/lxkXrKYUwqyU56YLwQZ4dHRT+6jFHkztcag==}
     engines: {node: '>=10'}
     cpu: [x64]
     os: [darwin]
 
-  '@swc/core-linux-arm-gnueabihf@1.16.2':
-    resolution: {integrity: sha512-MdXi83Z/gGp1LIrg+h7HKxiul/z/Bty/ZJSvYAFqDl9zteC1XLSAZdScquKtXPp50rdyXqritTDCqQBhwVfZKA==}
+  '@swc/core-linux-arm-gnueabihf@1.16.13':
+    resolution: {integrity: sha512-tUSojGIythnHJKrElDM9OvuhBnK+FF39eM9iIBgj9kdfbAm6PhAM7dKbaSDcnX2gOLG2slkasjD0Z8m/YUlzOA==}
     engines: {node: '>=10'}
     cpu: [arm]
     os: [linux]
 
-  '@swc/core-linux-arm64-gnu@1.16.2':
-    resolution: {integrity: sha512-/jcTmK6Ktz3owM3YtiKvjofV6p3VpHnYzTIrOGwDIOsDigRAAVuZ8east33wYO/7UTdKYFlyHNnJNT0WJqOA3Q==}
+  '@swc/core-linux-arm64-gnu@1.16.13':
+    resolution: {integrity: sha512-qS3bk/ezRrLXGn1b764S/EG3/oKj6uRhnTNRAALpnuu8d9I0YwSiUkQghnX7lOH9X/yRr+qrFI3R0wAruO47Tg==}
     engines: {node: '>=10'}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@swc/core-linux-arm64-musl@1.16.2':
-    resolution: {integrity: sha512-4gFarKaFnlJTSlJYKmMhV4u+3YE4uYfiydpBoYjmgQhCf9lAieOq+WilZaK9vVSHeqLuQpTEiGULZqAdsRX5Dw==}
+  '@swc/core-linux-arm64-musl@1.16.13':
+    resolution: {integrity: sha512-aeoYoG6fQsOS3mFOuTKvnJo1aaaxYNI0aRRlhdHaGP4q1YQx4XOc5Hkd35IFduWCBG3eZl3fPTjRuYvxpl7eTA==}
     engines: {node: '>=10'}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@swc/core-linux-ppc64-gnu@1.16.2':
-    resolution: {integrity: sha512-syqSLGd6KlZ1PciNzs6bIUlhOuFztZufebOHaERjc4N4SqNZxyqYd4I+jj/EfOYnpe0kNjccn9HJLN1p5dz3+w==}
+  '@swc/core-linux-ppc64-gnu@1.16.13':
+    resolution: {integrity: sha512-eEFoueZXWZ2S1lsqL8Ve2C8RjhzH9+Ktj8U4IGTUQL6CNG04+VhQiYQWJOf5xfVBU6I+PbH80yvsYegqZOOSZQ==}
     engines: {node: '>=10'}
     cpu: [ppc64]
     os: [linux]
     libc: [glibc]
 
-  '@swc/core-linux-s390x-gnu@1.16.2':
-    resolution: {integrity: sha512-ZBBLK+ewGyXLzWeMS7wbKtWBdnif6etn7xvPY/iOfbdsjX/+bgkp1pQt2lWF2wlu2hXYZuhJ/tHZE/QR8/apzg==}
+  '@swc/core-linux-s390x-gnu@1.16.13':
+    resolution: {integrity: sha512-K0q1ReVXL3d5bzBgZxS+yJq5q2xRjg4k2XXGj9yiCEpE5ZqJGQ4Gtk1sRrk8W2lo3KY0DCJD3Myt6x2SMvGArQ==}
     engines: {node: '>=10'}
     cpu: [s390x]
     os: [linux]
     libc: [glibc]
 
-  '@swc/core-linux-x64-gnu@1.16.2':
-    resolution: {integrity: sha512-LyHJgxCA4Tje0ysBMbEb0tt/ie8kgUKoFE3JAKFhpevmTmhYEoC0H9s47WuDsqiFckF1ITUguZIXJG6K5e0dvg==}
+  '@swc/core-linux-x64-gnu@1.16.13':
+    resolution: {integrity: sha512-Qvpihw30irhIjy2f91BR1pamcJBCgf8hmr9XWenztAX1YLkneRkkTB/PFGWQubhaBqQhY2uZKViMj/xV61uMBQ==}
     engines: {node: '>=10'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@swc/core-linux-x64-musl@1.16.2':
-    resolution: {integrity: sha512-PghXJlVM1cgtLfNUR1vxFo1z+PDRAe8cWAJlZZ7spmeiN7BospGXg/MHUg7oNSgwSX7Zo//YKv9P5yD9apsFJQ==}
+  '@swc/core-linux-x64-musl@1.16.13':
+    resolution: {integrity: sha512-iCGxHbh3Cq5vqRvCPlw3XkkDz4RlkPSyQwfFKbOKTMj5tiEuojY/rLmf4BMfI9Z8yPJTf9VB07t3NbKInoC97g==}
     engines: {node: '>=10'}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@swc/core-win32-arm64-msvc@1.16.2':
-    resolution: {integrity: sha512-StTOSefYBxemvNYYUI3UmO1a8y+hSPjjfHogC2TEHL+Z1PlEBim/XtLas5rS04jAzT9RrNmbtX911SZ42H9jSQ==}
+  '@swc/core-win32-arm64-msvc@1.16.13':
+    resolution: {integrity: sha512-iOabn6cd+hg3cnoKlAC8j3Yufv8nQHBVU5OIDX8dCPA95PjAZ0B0TlDn9sWivk8ezo/cLJux7p9n0B9vRej+1Q==}
     engines: {node: '>=10'}
     cpu: [arm64]
     os: [win32]
 
-  '@swc/core-win32-ia32-msvc@1.16.2':
-    resolution: {integrity: sha512-fycER209DYIzsibpTMC+chND05OfOjgztWL9U8OE6/uUlsOUZH3eh98isBLEnOymYUhlJLEt5++W1+KL/FOh5Q==}
+  '@swc/core-win32-ia32-msvc@1.16.13':
+    resolution: {integrity: sha512-+1b/3xBNuVbpnJIZUCAaSdscOPYRWq85eohKx44y/3qbPp56UMiCJWBiWtyr7K5F1nf1JENXm2IBSEJaLgWq6Q==}
     engines: {node: '>=10'}
     cpu: [ia32]
     os: [win32]
 
-  '@swc/core-win32-x64-msvc@1.16.2':
-    resolution: {integrity: sha512-cSd1z6ivSrJPVr+moVwOHWjeKy6TpO4/Shwcv5KCrKYXCccxwh4pRy1C3fDioNx2PF1jPZWHKZjtXt+Be9VbaQ==}
+  '@swc/core-win32-x64-msvc@1.16.13':
+    resolution: {integrity: sha512-6kEJhYshk7OVoVIWryiHqjCNuwZeOlPTS6et+bKV/WhtHs8fLA01wyTLrQGi+4ultgRe/o0M4b25K/KKdvl0dQ==}
     engines: {node: '>=10'}
     cpu: [x64]
     os: [win32]
 
-  '@swc/core@1.16.2':
-    resolution: {integrity: sha512-95I4kiSMeveI/Mhi+tE4fiWcWLUMfzfKrk0jtr8LRMqHgOgq+xHS+zExkDqoO4b5OeeuXHMWVdD5MeP3X6sULw==}
+  '@swc/core@1.16.13':
+    resolution: {integrity: sha512-k4uUsIMS0IwOKVsrQs48IZK75O4roV3FnuJEdL7ES+DFESftdgvz73QBqN3VUAbUmUr78We4tzG0kgYj36M22Q==}
     engines: {node: '>=10'}
     peerDependencies:
       '@swc/helpers': '>=0.5.17'
@@ -4984,10 +4953,6 @@ packages:
     engines: {node: '>=10.13.0'}
     hasBin: true
 
-  qs@6.15.3:
-    resolution: {integrity: sha512-O9gl3zCl5h5blw1KGUzQKhA5oUXSl8rwUIM5o0S3nCXMliSvy5Dzx7/DJcI+SwgICv+IneSZwhBh1oSyEHA71A==}
-    engines: {node: '>=0.6'}
-
   qs@6.16.0:
     resolution: {integrity: sha512-h6fhOIaRrID2CbEY2fqs+7t+UXZo+MLAnU5gRIq85uFtdiUPCdsApMlHhXogKVM4HM2DVbIjGNTTYH2OcmP1vA==}
     engines: {node: '>=0.6'}
@@ -5679,11 +5644,6 @@ packages:
       '@types/react':
         optional: true
 
-  use-sync-external-store@1.6.0:
-    resolution: {integrity: sha512-Pp6GSwGP/NrPIrxVFAIkOQeyw8lFenOHijQWkUTrDvrF4ALqylP2C/KCkeS9dpUM3KvYRQhna5vt7IL95+ZQ9w==}
-    peerDependencies:
-      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-
   use-sync-external-store@1.7.0:
     resolution: {integrity: sha512-6L+EeigHMQhdaIPNIFUKwfWJSwWFQ8gJbJ2DLOs5sDIegTwR9fRxvnM3uciHKjIZhFz+KAv2emhWMRvDmMcY8A==}
     peerDependencies:
@@ -5928,26 +5888,10 @@ snapshots:
       immutable: 5.1.9
       invariant: 2.2.4
 
-  '@ariakit/components@0.1.10':
-    dependencies:
-      '@ariakit/store': 0.1.8
-      '@ariakit/utils': 0.1.6
-
   '@ariakit/components@0.1.13':
     dependencies:
       '@ariakit/store': 0.1.10
       '@ariakit/utils': 0.2.1
-
-  '@ariakit/react-components@0.4.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
-    dependencies:
-      '@ariakit/components': 0.1.10
-      '@ariakit/react-store': 0.1.9(react@18.3.1)
-      '@ariakit/react-utils': 0.2.4(react@18.3.1)
-      '@ariakit/store': 0.1.8
-      '@ariakit/utils': 0.1.6
-      '@floating-ui/dom': 1.8.0
-      react: 18.3.1
-      react-dom: 18.3.1(react@18.3.1)
 
   '@ariakit/react-components@0.6.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
@@ -5968,31 +5912,11 @@ snapshots:
       react: 18.3.1
       use-sync-external-store: 1.7.0(react@18.3.1)
 
-  '@ariakit/react-store@0.1.9(react@18.3.1)':
-    dependencies:
-      '@ariakit/react-utils': 0.2.4(react@18.3.1)
-      '@ariakit/store': 0.1.8
-      '@ariakit/utils': 0.1.6
-      react: 18.3.1
-      use-sync-external-store: 1.6.0(react@18.3.1)
-
-  '@ariakit/react-utils@0.2.4(react@18.3.1)':
-    dependencies:
-      '@ariakit/store': 0.1.8
-      '@ariakit/utils': 0.1.6
-      react: 18.3.1
-
   '@ariakit/react-utils@0.2.6(react@18.3.1)':
     dependencies:
       '@ariakit/store': 0.1.10
       '@ariakit/utils': 0.2.1
       react: 18.3.1
-
-  '@ariakit/react@0.4.37(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
-    dependencies:
-      '@ariakit/react-components': 0.4.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      react: 18.3.1
-      react-dom: 18.3.1(react@18.3.1)
 
   '@ariakit/react@0.4.40(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
@@ -6003,12 +5927,6 @@ snapshots:
   '@ariakit/store@0.1.10':
     dependencies:
       '@ariakit/utils': 0.2.1
-
-  '@ariakit/store@0.1.8':
-    dependencies:
-      '@ariakit/utils': 0.1.6
-
-  '@ariakit/utils@0.1.6': {}
 
   '@ariakit/utils@0.2.1': {}
 
@@ -7015,7 +6933,7 @@ snapshots:
 
   '@medusajs/dashboard@2.21.1(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(ajv@8.13.0)(typescript@5.9.3)':
     dependencies:
-      '@ariakit/react': 0.4.37(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@ariakit/react': 0.4.40(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@babel/runtime': 7.29.7
       '@dnd-kit/core': 6.3.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@dnd-kit/sortable': 8.0.0(@dnd-kit/core@6.3.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)
@@ -7043,7 +6961,7 @@ snapshots:
       match-sorter: 6.3.4
       motion: 11.18.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       qrcode: 1.5.4
-      qs: 6.15.3
+      qs: 6.16.0
       radix-ui: 1.1.2(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react: 18.3.1
       react-country-flag: 3.1.0(react@18.3.1)
@@ -7295,7 +7213,7 @@ snapshots:
     dependencies:
       '@medusajs/framework': 2.21.1(@medusajs/cli@2.21.1(@types/node@20.19.43))(@types/node@20.19.43)(ioredis@5.11.1)(vite@7.3.6(@types/node@20.19.43)(jiti@2.7.0)(yaml@2.9.1))(zod@4.2.0)
 
-  '@medusajs/medusa@2.21.1(@medusajs/admin-sdk@2.21.1)(@medusajs/cli@2.21.1(@types/node@20.19.43))(@medusajs/dashboard@2.21.1(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(ajv@8.13.0)(typescript@5.9.3))(@medusajs/framework@2.21.1(@medusajs/cli@2.21.1(@types/node@20.19.43))(@types/node@20.19.43)(ioredis@5.11.1)(vite@7.3.6(@types/node@20.19.43)(jiti@2.7.0)(yaml@2.9.1))(zod@4.2.0))(@medusajs/icons@2.21.1(react@18.3.1))(@medusajs/test-utils@2.21.1)(@medusajs/ui@4.2.5(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@20.19.43)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(ajv@8.13.0)(awilix@8.0.1)(jiti@2.7.0)(picomatch@4.0.7)(posthog-node@5.48.1(rxjs@7.8.2))(react-dom@18.3.1(react@18.3.1))(react-router-dom@7.18.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)(yalc@1.0.0-pre.53)(yaml@2.9.1)':
+  '@medusajs/medusa@2.21.1(@medusajs/admin-sdk@2.21.1)(@medusajs/cli@2.21.1(@types/node@20.19.43))(@medusajs/dashboard@2.21.1(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(ajv@8.13.0)(typescript@5.9.3))(@medusajs/framework@2.21.1(@medusajs/cli@2.21.1(@types/node@20.19.43))(@types/node@20.19.43)(ioredis@5.11.1)(vite@7.3.6(@types/node@20.19.43)(jiti@2.7.0)(yaml@2.9.1))(zod@4.2.0))(@medusajs/icons@2.21.1(react@18.3.1))(@medusajs/test-utils@2.21.1)(@medusajs/ui@4.2.5(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@swc/core@1.16.13(@swc/helpers@0.5.23))(@types/node@20.19.43)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(ajv@8.13.0)(awilix@8.0.1)(jiti@2.7.0)(picomatch@4.0.7)(posthog-node@5.48.1(rxjs@7.8.2))(react-dom@18.3.1(react@18.3.1))(react-router-dom@7.18.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)(yalc@1.0.0-pre.53)(yaml@2.9.1)':
     dependencies:
       '@inquirer/checkbox': 2.5.0
       '@inquirer/confirm': 2.0.17
@@ -7370,7 +7288,7 @@ snapshots:
       slugify: 1.6.9
       uuid: 11.1.1
     optionalDependencies:
-      '@swc/core': 1.16.2(@swc/helpers@0.5.23)
+      '@swc/core': 1.16.13(@swc/helpers@0.5.23)
       posthog-node: 5.48.1(rxjs@7.8.2)
       react-dom: 18.3.1(react@18.3.1)
       yalc: 1.0.0-pre.53
@@ -7588,7 +7506,7 @@ snapshots:
       ulid: 2.4.0
     optionalDependencies:
       '@medusajs/core-flows': 2.21.1(@medusajs/framework@2.21.1(@medusajs/cli@2.21.1(@types/node@20.19.43))(@types/node@20.19.43)(ioredis@5.11.1)(vite@7.3.6(@types/node@20.19.43)(jiti@2.7.0)(yaml@2.9.1))(zod@4.2.0))
-      '@medusajs/medusa': 2.21.1(@medusajs/admin-sdk@2.21.1)(@medusajs/cli@2.21.1(@types/node@20.19.43))(@medusajs/dashboard@2.21.1(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(ajv@8.13.0)(typescript@5.9.3))(@medusajs/framework@2.21.1(@medusajs/cli@2.21.1(@types/node@20.19.43))(@types/node@20.19.43)(ioredis@5.11.1)(vite@7.3.6(@types/node@20.19.43)(jiti@2.7.0)(yaml@2.9.1))(zod@4.2.0))(@medusajs/icons@2.21.1(react@18.3.1))(@medusajs/test-utils@2.21.1)(@medusajs/ui@4.2.5(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@20.19.43)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(ajv@8.13.0)(awilix@8.0.1)(jiti@2.7.0)(picomatch@4.0.7)(posthog-node@5.48.1(rxjs@7.8.2))(react-dom@18.3.1(react@18.3.1))(react-router-dom@7.18.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)(yalc@1.0.0-pre.53)(yaml@2.9.1)
+      '@medusajs/medusa': 2.21.1(@medusajs/admin-sdk@2.21.1)(@medusajs/cli@2.21.1(@types/node@20.19.43))(@medusajs/dashboard@2.21.1(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(ajv@8.13.0)(typescript@5.9.3))(@medusajs/framework@2.21.1(@medusajs/cli@2.21.1(@types/node@20.19.43))(@types/node@20.19.43)(ioredis@5.11.1)(vite@7.3.6(@types/node@20.19.43)(jiti@2.7.0)(yaml@2.9.1))(zod@4.2.0))(@medusajs/icons@2.21.1(react@18.3.1))(@medusajs/test-utils@2.21.1)(@medusajs/ui@4.2.5(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@swc/core@1.16.13(@swc/helpers@0.5.23))(@types/node@20.19.43)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(ajv@8.13.0)(awilix@8.0.1)(jiti@2.7.0)(picomatch@4.0.7)(posthog-node@5.48.1(rxjs@7.8.2))(react-dom@18.3.1(react@18.3.1))(react-router-dom@7.18.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)(yalc@1.0.0-pre.53)(yaml@2.9.1)
     transitivePeerDependencies:
       - debug
       - supports-color
@@ -9213,59 +9131,59 @@ snapshots:
 
   '@standard-schema/utils@0.3.0': {}
 
-  '@swc/core-darwin-arm64@1.16.2':
+  '@swc/core-darwin-arm64@1.16.13':
     optional: true
 
-  '@swc/core-darwin-x64@1.16.2':
+  '@swc/core-darwin-x64@1.16.13':
     optional: true
 
-  '@swc/core-linux-arm-gnueabihf@1.16.2':
+  '@swc/core-linux-arm-gnueabihf@1.16.13':
     optional: true
 
-  '@swc/core-linux-arm64-gnu@1.16.2':
+  '@swc/core-linux-arm64-gnu@1.16.13':
     optional: true
 
-  '@swc/core-linux-arm64-musl@1.16.2':
+  '@swc/core-linux-arm64-musl@1.16.13':
     optional: true
 
-  '@swc/core-linux-ppc64-gnu@1.16.2':
+  '@swc/core-linux-ppc64-gnu@1.16.13':
     optional: true
 
-  '@swc/core-linux-s390x-gnu@1.16.2':
+  '@swc/core-linux-s390x-gnu@1.16.13':
     optional: true
 
-  '@swc/core-linux-x64-gnu@1.16.2':
+  '@swc/core-linux-x64-gnu@1.16.13':
     optional: true
 
-  '@swc/core-linux-x64-musl@1.16.2':
+  '@swc/core-linux-x64-musl@1.16.13':
     optional: true
 
-  '@swc/core-win32-arm64-msvc@1.16.2':
+  '@swc/core-win32-arm64-msvc@1.16.13':
     optional: true
 
-  '@swc/core-win32-ia32-msvc@1.16.2':
+  '@swc/core-win32-ia32-msvc@1.16.13':
     optional: true
 
-  '@swc/core-win32-x64-msvc@1.16.2':
+  '@swc/core-win32-x64-msvc@1.16.13':
     optional: true
 
-  '@swc/core@1.16.2(@swc/helpers@0.5.23)':
+  '@swc/core@1.16.13(@swc/helpers@0.5.23)':
     dependencies:
       '@swc/counter': 0.1.3
       '@swc/types': 0.1.28
     optionalDependencies:
-      '@swc/core-darwin-arm64': 1.16.2
-      '@swc/core-darwin-x64': 1.16.2
-      '@swc/core-linux-arm-gnueabihf': 1.16.2
-      '@swc/core-linux-arm64-gnu': 1.16.2
-      '@swc/core-linux-arm64-musl': 1.16.2
-      '@swc/core-linux-ppc64-gnu': 1.16.2
-      '@swc/core-linux-s390x-gnu': 1.16.2
-      '@swc/core-linux-x64-gnu': 1.16.2
-      '@swc/core-linux-x64-musl': 1.16.2
-      '@swc/core-win32-arm64-msvc': 1.16.2
-      '@swc/core-win32-ia32-msvc': 1.16.2
-      '@swc/core-win32-x64-msvc': 1.16.2
+      '@swc/core-darwin-arm64': 1.16.13
+      '@swc/core-darwin-x64': 1.16.13
+      '@swc/core-linux-arm-gnueabihf': 1.16.13
+      '@swc/core-linux-arm64-gnu': 1.16.13
+      '@swc/core-linux-arm64-musl': 1.16.13
+      '@swc/core-linux-ppc64-gnu': 1.16.13
+      '@swc/core-linux-s390x-gnu': 1.16.13
+      '@swc/core-linux-x64-gnu': 1.16.13
+      '@swc/core-linux-x64-musl': 1.16.13
+      '@swc/core-win32-arm64-msvc': 1.16.13
+      '@swc/core-win32-ia32-msvc': 1.16.13
+      '@swc/core-win32-x64-msvc': 1.16.13
       '@swc/helpers': 0.5.23
 
   '@swc/counter@0.1.3': {}
@@ -11541,11 +11459,6 @@ snapshots:
       pngjs: 5.0.0
       yargs: 15.4.1
 
-  qs@6.15.3:
-    dependencies:
-      es-define-property: 1.0.1
-      side-channel: 1.1.1
-
   qs@6.16.0:
     dependencies:
       es-define-property: 1.0.1
@@ -12165,7 +12078,7 @@ snapshots:
 
   ts-interface-checker@0.1.13: {}
 
-  ts-node@10.9.2(@swc/core@1.16.2(@swc/helpers@0.5.23))(@types/node@20.19.43)(typescript@5.9.3):
+  ts-node@10.9.2(@swc/core@1.16.13(@swc/helpers@0.5.23))(@types/node@20.19.43)(typescript@5.9.3):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       '@tsconfig/node10': 1.0.13
@@ -12183,7 +12096,7 @@ snapshots:
       v8-compile-cache-lib: 3.0.1
       yn: 3.1.1
     optionalDependencies:
-      '@swc/core': 1.16.2(@swc/helpers@0.5.23)
+      '@swc/core': 1.16.13(@swc/helpers@0.5.23)
 
   tsconfig-paths@4.2.0:
     dependencies:
@@ -12278,10 +12191,6 @@ snapshots:
       tslib: 2.8.1
     optionalDependencies:
       '@types/react': 18.3.31
-
-  use-sync-external-store@1.6.0(react@18.3.1):
-    dependencies:
-      react: 18.3.1
 
   use-sync-external-store@1.7.0(react@18.3.1):
     dependencies:
