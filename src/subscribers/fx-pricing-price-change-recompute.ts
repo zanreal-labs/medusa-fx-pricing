@@ -8,10 +8,10 @@ import {
   listVariantIdsByProductIds,
 } from "../workflows/lib/catalog";
 import { runFxPricingRecompute } from "../workflows/recompute-fx-prices";
-import { FX_PRICING_TRIGGER_EVENTS, parseFxPricingEvent } from "./lib/events";
-import type { ParsedFxPricingEvent } from "./lib/events";
-import { createRecomputeQueue } from "./lib/recompute-queue";
-import type { RecomputeQueue } from "./lib/recompute-queue";
+import { FX_PRICING_TRIGGER_EVENTS, parseFxPricingEvent } from "../lib/events";
+import type { ParsedFxPricingEvent } from "../lib/events";
+import { createRecomputeQueue } from "../lib/recompute-queue";
+import type { RecomputeQueue } from "../lib/recompute-queue";
 
 const SUBSCRIBER_NAME = "fx-pricing-price-change-recompute";
 
@@ -69,7 +69,7 @@ const NATIVE_CURRENCY = "pln";
  * off (the default - it ships unarmed) pays one indexed single-row read per
  * product save and stops there. When it is on, ids are collected into a
  * coalescing queue and the recompute runs once per burst rather than once per
- * event - see `lib/recompute-queue.ts`, which explains why a burst is the normal
+ * event - see `src/lib/recompute-queue.ts`, which explains why a burst is the normal
  * case here rather than the exception.
  */
 export default async function fxPricingPriceChangeRecomputeHandler({

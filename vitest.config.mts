@@ -12,6 +12,7 @@ export default defineConfig({
       include: [
         "src/modules/fx-pricing/**/*.ts",
         "src/subscribers/**/*.ts",
+        "src/lib/**/*.ts",
         "src/workflows/**/*.ts",
       ],
       provider: "v8",

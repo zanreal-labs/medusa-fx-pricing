@@ -78,7 +78,7 @@ const formatDateTime = (value: string | null | undefined, t: (key: string) => st
   return new Date(value).toLocaleString();
 };
 
-const formatRate = (rate: LiveRateDTO | LiveRateErrorDTO | undefined, t: (key: string, options?: Record<string, unknown>) => string): string => {
+const formatRate = (rate: LiveRateDTO | LiveRateErrorDTO | undefined, t: ReturnType<typeof useTranslation>["t"]): string => {
   if (!rate) {
     return t("fxPricing.rates.loading");
   }
