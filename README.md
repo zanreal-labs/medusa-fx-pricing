@@ -178,7 +178,7 @@ The queue is in-process rather than lock-and-cache coordinated across workers, b
 already partitioned by variant id: two workers each holding half a burst produce two runs over
 disjoint variant sets, which is the correct answer reached in two passes. The cost is that ids held
 in the queue are lost if the process exits before the flush - which is one more thing the daily job
-is the backstop for. See `src/subscribers/lib/recompute-queue.ts`.
+is the backstop for. See `src/lib/recompute-queue.ts`.
 
 ### What it does not do
 
@@ -606,10 +606,10 @@ The pure business logic has exhaustive unit tests and no framework dependency:
   (see "Dry run" above), from fixture data.
 - `src/workflows/lib/variant-prices.ts` - reading a variant's default price out of its raw price
   list (`findDefaultPrice`, `hasQuantityTieredPrice`).
-- `src/subscribers/lib/events.ts` - which events are subscribed to and how the ids are read out of
+- `src/lib/events.ts` - which events are subscribed to and how the ids are read out of
   one (`parseFxPricingEvent`), including that the match is exact rather than by prefix and that the
   three payload shapes Medusa can hand a subscriber are all accepted.
-- `src/subscribers/lib/recompute-queue.ts` - the burst coalescing
+- `src/lib/recompute-queue.ts` - the burst coalescing
   (`createRecomputeQueue`): one flush per burst with the union of its ids, the quiet period, the
   deadline that stops a long import holding the first price hostage, and that two recomputes never
   overlap. The clock is injected, so the timing is asserted rather than waited for.

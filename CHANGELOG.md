@@ -12,13 +12,27 @@ after the change.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.3.0] - 2026-11-22
+
 ### Changed
 
-- **Built and tested against Medusa 2.21.1** (was 2.18.0), with the admin toolchain Medusa 2.19
-  requires: Vite 7 and, where used, React Router 7. `react-i18next` and `i18next` deliberately stay
-  on the majors the Medusa dashboard itself ships (13 and 23): admin extensions share the host's
-  i18n instance, and a second major would give them one of their own. Install alongside Medusa
-  2.21.1; Node ^20.19 or ^22.12 is required from Medusa 2.19 on.
+- **Built and tested against Medusa 2.23.0** (was 2.18.0 in 0.2.1): the `@medusajs/*` peers pin
+  2.23.0 (`@medusajs/ui` 4.3.0), so install this release alongside Medusa 2.23.0 and stay on
+  0.2.1 with older hosts. Medusa 2.23 requires Node.js 22.22 or newer, and so does this package.
+- **React 19 admin toolchain.** The settings page is built with React 19, Vite 8 and
+  `react-i18next` 18, the majors the 2.23.0 dashboard ships; the `react-i18next` peer is now
+  `^18.0.1`. Admin extensions share the host's i18n instance, so it follows the dashboard.
+- Dependency updates now come from Renovate, run weekly by the `zanek-ai` app from
+  `.github/workflows/renovate.yml`, instead of Dependabot.
+
+### Fixed
+
+- The event parsing and burst-coalescing helpers moved from `src/subscribers/lib/` to
+  `src/lib/`. Medusa loads a subscriber from every file under `subscribers/` at any depth, so
+  the helpers were being picked up as (config-less) subscribers; the Medusa 2.23 lint rules
+  flag exactly that. The one real subscriber is unchanged.
 
 ## [0.2.1] - 2026-09-08
 
@@ -61,7 +75,8 @@ First public release. MIT, published from CI with npm provenance.
   is visible instead of being skipped.
 - Admin UI in English and Polish, with the sidebar label resolved through i18n.
 
-[Unreleased]: https://github.com/zanreal-labs/medusa-fx-pricing/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/zanreal-labs/medusa-fx-pricing/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/zanreal-labs/medusa-fx-pricing/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/zanreal-labs/medusa-fx-pricing/releases/tag/v0.2.1
 [0.2.0]: https://github.com/zanreal-labs/medusa-fx-pricing/releases/tag/v0.2.0
 [0.1.0]: https://github.com/zanreal-labs/medusa-fx-pricing/releases/tag/v0.1.0
