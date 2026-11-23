@@ -68,7 +68,7 @@ export interface RecomputeQueue {
 
 export function createRecomputeQueue(options: RecomputeQueueOptions): RecomputeQueue {
   const {
-    clearTimer = clearTimeout,
+    clearTimer = (handle: unknown): void => clearTimeout(handle as Parameters<typeof clearTimeout>[0]),
     flush,
     maxWaitMs = DEFAULT_MAX_WAIT_MS,
     now = Date.now,
